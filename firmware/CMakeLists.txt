@@ -2,7 +2,8 @@
 # in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-
-set(PROJECT_VER "1.0")
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
-project(ferris_wheel)
+
+add_compile_options(-fdiagnostics-color=always)
+
+project(solar-tracker)

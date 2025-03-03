@@ -9,7 +9,22 @@
 #include <stdint.h>
 
 
-void motor_init(void);
-void motor_set_speed(uint32_t speed);
+class Motor {
+public:
+    Motor(uint8_t id);
+    
+   void set_pwm(int32_t percent);
+
+private:
+    uint8_t mot_id;
+    static bool is_init;
+};
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 
+#ifdef __cplusplus
+}
+#endif

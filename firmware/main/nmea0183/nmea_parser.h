@@ -137,22 +137,7 @@ typedef struct {
  */
 typedef void *nmea_parser_handle_t;
 
-/**
- * @brief Default configuration for NMEA Parser
- *
- */
-#define NMEA_PARSER_CONFIG_DEFAULT()              \
-    {                                             \
-        .uart = {                                 \
-            .uart_port = UART_NUM_1,              \
-            .rx_pin = 5,\
-            .baud_rate = 9600,                    \
-            .data_bits = UART_DATA_8_BITS,        \
-            .parity = UART_PARITY_DISABLE,        \
-            .stop_bits = UART_STOP_BITS_1,        \
-            .event_queue_size = 16                \
-        }                                         \
-    }
+
 
 /**
  * @brief NMEA Parser Event ID

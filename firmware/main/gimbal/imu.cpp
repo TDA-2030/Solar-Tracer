@@ -10,10 +10,15 @@
 #include "freertos/task.h"
 #include "wit_c_sdk.h"
 #include "driver/uart.h"
+#include "driver/i2c.h"
 #include "esp_log.h"
 #include "imu.h"
 #include "board.h"
 #include "gimbal.h"
+
+static const char *TAG = "imu";
+
+#define IMU_USE_UART 0
 
 #define BUF_SIZE 1024
 
@@ -28,7 +33,8 @@ static void SensorDataUpdata(uint32_t uiReg, uint32_t uiRegNum);
 static void AutoScanSensor(void);
 static IMU *globalInstance = nullptr;
 
-#define IMU_UART_NUM UART_NUM_0
+#if IMU_USE_UART
+#define IMU_UART_NUM UART_NUM_1
 
 static void UsartInit(int baud_rate)
 {
@@ -45,7 +51,7 @@ static void UsartInit(int baud_rate)
 
     ESP_ERROR_CHECK(uart_driver_install(IMU_UART_NUM, BUF_SIZE * 2, 0, 0, NULL, 0));
     ESP_ERROR_CHECK(uart_param_config(IMU_UART_NUM, &uart_config));
-    ESP_ERROR_CHECK(uart_set_pin(IMU_UART_NUM, UART_PIN_NO_CHANGE, BOARD_IO_GPS_TX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+    ESP_ERROR_CHECK(uart_set_pin(IMU_UART_NUM, UART_PIN_NO_CHANGE, BOARD_IO_IMU_TX, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 }
 
 static void SensorUartSend(uint8_t *p_data, uint32_t uiSize)
@@ -53,40 +59,161 @@ static void SensorUartSend(uint8_t *p_data, uint32_t uiSize)
     uart_write_bytes(IMU_UART_NUM, (const char *)p_data, uiSize);
 }
 
+static void AutoScanSensor(void)
+{
+    const uint32_t c_uiBaud[10] = {0, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600};
+    int i, iRetry;
+
+    for (i = 1; i < 10; i++) {
+        uart_set_baudrate(IMU_UART_NUM, c_uiBaud[i]);
+        iRetry = 2;
+        do {
+            s_cDataUpdate = 0;
+            // WitReadReg(AX, 3);
+            Delayms(100);
+            if (s_cDataUpdate != 0) {
+                ESP_LOGI(TAG, "IMU Sensor at %u baud\r\n", c_uiBaud[i]); //lu
+                return ;
+            }
+            iRetry--;
+        } while (iRetry);
+    }
+    ESP_LOGE(TAG, "can not find sensor");
+}
+#else
+
+#define ACK_CHECK_EN 0x1                        /*!< I2C master will check ack from slave*/
+#define ACK_CHECK_DIS 0x0                       /*!< I2C master will not check ack from slave */
+#define I2C_MASTER_TX_BUF_DISABLE 0             /*!< I2C master doesn't need buffer */
+#define I2C_MASTER_RX_BUF_DISABLE 0             /*!< I2C master doesn't need buffer */
+static i2c_port_t i2c_master_port = I2C_NUM_0;
+
+static esp_err_t i2c_master_init(void)
+{
+    i2c_config_t conf = {
+        .mode = I2C_MODE_MASTER,
+        .sda_io_num = BOARD_IO_IMU_SDA,
+        .scl_io_num = BOARD_IO_IMU_SCL,
+        .sda_pullup_en = GPIO_PULLUP_ENABLE,
+        .scl_pullup_en = GPIO_PULLUP_ENABLE,
+        .master = {
+            .clk_speed = 400000,
+        },
+        .clk_flags = 0,          /*!< Optional, you can use I2C_SCLK_SRC_FLAG_* flags to choose i2c source clock here. */
+    };
+    esp_err_t err = i2c_param_config(i2c_master_port, &conf);
+    if (err != ESP_OK) {
+        return err;
+    }
+    return i2c_driver_install(i2c_master_port, conf.mode, I2C_MASTER_RX_BUF_DISABLE, I2C_MASTER_TX_BUF_DISABLE, 0);
+}
+
+
+static int32_t WitIICRead(uint8_t ucAddr, uint8_t ucReg, uint8_t *p_ucVal, uint32_t uiLen)
+{
+    int ret;
+    int i;
+
+    if (uiLen == 0) {
+        return 0;
+    }
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, ucAddr, ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, ucReg, ACK_CHECK_EN);
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, ucAddr | 0x01, ACK_CHECK_EN);
+    for (i = 0; i < uiLen; i++) {
+        if (i == uiLen - 1) { // last pack
+            i2c_master_read_byte(cmd, p_ucVal + i, I2C_MASTER_NACK);
+        } else {
+            i2c_master_read_byte(cmd, p_ucVal + i, I2C_MASTER_ACK);
+        }
+    }
+    i2c_master_stop(cmd);
+    ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_PERIOD_MS);
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
+
+static int32_t WitIICWrite(uint8_t ucAddr, uint8_t ucReg, uint8_t *p_ucVal, uint32_t uiLen)
+{
+    int ret;
+    int i;
+
+    if (uiLen == 0) {
+        return 0;
+    }
+
+    i2c_cmd_handle_t cmd = i2c_cmd_link_create();
+    i2c_master_start(cmd);
+    i2c_master_write_byte(cmd, ucAddr, ACK_CHECK_EN);
+    i2c_master_write_byte(cmd, ucReg, ACK_CHECK_EN);
+    for (i = 0; i < uiLen; i++) {
+        if (i == uiLen - 1) { // last pack
+            i2c_master_read_byte(cmd, p_ucVal + i, I2C_MASTER_NACK);
+        } else {
+            i2c_master_read_byte(cmd, p_ucVal + i, I2C_MASTER_ACK);
+        }
+    }
+    i2c_master_stop(cmd);
+    ret = i2c_master_cmd_begin(i2c_master_port, cmd, 1000 / portTICK_PERIOD_MS);
+    i2c_cmd_link_delete(cmd);
+    return ret;
+}
+
+#endif
+
+
 static void Delayms(uint16_t usMs)
 {
     vTaskDelay(usMs / portTICK_PERIOD_MS);
 }
 
-static void imu_Usart_task(void *pvParameters)
+
+static void imu_task(void *pvParameters)
 {
+#if IMU_USE_UART
     unsigned char ucTemp;
     UsartInit(9600);
-    ESP_LOGI("imu", "imu task started");
+#else
+    i2c_master_init();
+#endif
+
+    ESP_LOGI(TAG, "imu task started");
     while (1) {
+#if IMU_USE_UART
         if (uart_read_bytes(IMU_UART_NUM, &ucTemp, 1, portMAX_DELAY) == 1) {
             WitSerialDataIn(ucTemp);
         }
+#else
+        if (WitReadReg(AX, 13) != WIT_HAL_OK) {
+            ESP_LOGE(TAG, "imu read error");
+        }
+        Delayms(20);
+#endif
     }
 }
 
-
 IMU::IMU()
 {
-    ESP_LOGI("imu", "imu initializing");
-    WitInit(WIT_PROTOCOL_NORMAL, 0x50);
-    WitSerialWriteRegister(SensorUartSend);
+    ESP_LOGI(TAG, "imu initializing");
+    WitInit(WIT_PROTOCOL_I2C, 0x50);
     WitRegisterCallBack(SensorDataUpdata);
     WitDelayMsRegister(Delayms);
-    xTaskCreate(imu_Usart_task, "imu_task", 4096, NULL, 3, &imuTaskHandle);
-    printf("\r\n********************** wit-motion normal example  ************************\r\n");
-    AutoScanSensor();
+#if IMU_USE_UART
+    WitSerialWriteRegister(SensorUartSend);
+#else
+    WitI2cFuncRegister(WitIICWrite, WitIICRead);
+#endif
+    xTaskCreate(imu_task, "imu_task", 4096, NULL, configMAX_PRIORITIES - 1, &imuTaskHandle);
     globalInstance = this;
 }
 
 IMU::~IMU()
 {
-    ESP_LOGW("imu", "imu task deleted");
+    ESP_LOGW(TAG, "imu task deleted");
     vTaskDelete(imuTaskHandle);
 }
 
@@ -112,34 +239,13 @@ static void SensorDataUpdata(uint32_t uiReg, uint32_t uiRegNum)
         case HZ:
             s_cDataUpdate |= MAG_UPDATE;
             if (globalInstance) {
-                imu_data_t& dat = globalInstance->imu_data;
+                imu_data_t &dat = globalInstance->imu_data;
                 for (int i = 0; i < 3; i++) {
                     dat.acc.data[i] = sReg[AX + i] / 32768.0f * 16.0f;
                     dat.gyro.data[i] = sReg[GX + i] / 32768.0f * 2000.0f;
                     dat.angle.data[i] = sReg[Roll + i] / 32768.0f * 180.0f;
                 }
-                if (s_cDataUpdate & ACC_UPDATE) {
-                    printf("acc:%.3f %.3f %.3f\r\n", dat.acc.data[0], dat.acc.data[1], dat.acc.data[2]);
-                    s_cDataUpdate &= ~ACC_UPDATE;
-                }
-                if (s_cDataUpdate & GYRO_UPDATE) {
-                    printf("gyro:%.3f %.3f %.3f\r\n", dat.gyro.data[0], dat.gyro.data[1], dat.gyro.data[2]);
-                    s_cDataUpdate &= ~GYRO_UPDATE;
-                }
-                if (s_cDataUpdate & ANGLE_UPDATE) {
-                    printf("angle:%.3f %.3f %.3f\r\n", dat.angle.data[0], dat.angle.data[1], dat.angle.data[2]);
-                    s_cDataUpdate &= ~ANGLE_UPDATE;
-                }
-                if (s_cDataUpdate & MAG_UPDATE) {
-                    printf("mag:%d %d %d\r\n", sReg[HX], sReg[HY], sReg[HZ]);
-                    s_cDataUpdate &= ~MAG_UPDATE;
-                }
-                if (s_cDataUpdate & TEMP_UPDATE) {
-                    printf("temp:%f\r\n", sReg[TEMP] / 100.0);
-                    s_cDataUpdate &= ~TEMP_UPDATE;
-                }
                 globalInstance->notifyObservers(dat); // 通知所有观察者
-
             }
             break;
 //            case Roll:
@@ -159,27 +265,7 @@ static void SensorDataUpdata(uint32_t uiReg, uint32_t uiRegNum)
     }
 }
 
-static void AutoScanSensor(void)
-{
-    const uint32_t c_uiBaud[10] = {0, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 460800, 921600};
-    int i, iRetry;
 
-    for (i = 1; i < 10; i++) {
-        uart_set_baudrate(IMU_UART_NUM, c_uiBaud[i]);
-        iRetry = 2;
-        do {
-            s_cDataUpdate = 0;
-            WitReadReg(AX, 3);
-            Delayms(100);
-            if (s_cDataUpdate != 0) {
-                printf("%u baud find sensor\r\n\r\n", c_uiBaud[i]); //lu
-                return ;
-            }
-            iRetry--;
-        } while (iRetry);
-    }
-    printf("can not find sensor\r\n");
-}
 
 int IMU::startAccCali()
 {

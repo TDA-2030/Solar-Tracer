@@ -278,7 +278,7 @@ int32_t WitWriteReg(uint32_t uiReg, uint16_t usData)
             if(p_WitI2cWriteFunc == NULL)return WIT_HAL_EMPTY;
             ucBuff[0] = usData & 0xff;
             ucBuff[1] = usData >> 8;
-			if(p_WitI2cWriteFunc(s_ucAddr << 1, uiReg, ucBuff, 2) != 1)
+			if(p_WitI2cWriteFunc(s_ucAddr << 1, uiReg, ucBuff, 2) != 0)
 			{
 				//printf("i2c write fail\r\n");
 			}
@@ -334,7 +334,7 @@ int32_t WitReadReg(uint32_t uiReg, uint32_t uiReadNum)
             if(p_WitI2cReadFunc == NULL)return WIT_HAL_EMPTY;
             usTemp = uiReadNum << 1;
             if(WIT_DATA_BUFF_SIZE < usTemp)return WIT_HAL_NOMEM;
-            if(p_WitI2cReadFunc(s_ucAddr << 1, uiReg, s_ucWitDataBuff, usTemp) == 1)
+            if(p_WitI2cReadFunc(s_ucAddr << 1, uiReg, s_ucWitDataBuff, usTemp) == 0)
             {
                 if(p_WitRegUpdateCbFunc == NULL)return WIT_HAL_EMPTY;
                 for(i = 0; i < uiReadNum; i++)

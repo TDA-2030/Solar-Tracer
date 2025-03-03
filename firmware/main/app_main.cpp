@@ -11,6 +11,8 @@
 
 static const char *TAG = "app_main";
 
+static Gimbal gimbal;
+
 #define TIME_ZONE (+8)   //Beijing Time
 #define YEAR_BASE (2000) //date in GPS starts from 2000
 
@@ -75,7 +77,6 @@ extern "C" void app_main()
     /* init NMEA parser library */
     ESP_LOGI(TAG, "NMEA parser initializing");
     nmea_parser_handle_t nmea_hdl = nmea_parser_init(&config);
-    /* register event handler for NMEA parser library */
     nmea_parser_add_handler(nmea_hdl, gps_event_handler, NULL);
 
     /** Determine whether to restore the settings by reading the restart count */
@@ -86,9 +87,8 @@ extern "C" void app_main()
         ESP_LOGW(TAG, "Erase information saved in flash and restart");
     }
 
-    // Gimbal gimbal = Gimbal();
-    // printf("Gimbal created\n");
-    // gimbal.init();
+    gimbal.init();
 
-   
+void start_web(void);
+start_web();
 }

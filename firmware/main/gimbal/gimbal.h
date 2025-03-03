@@ -19,9 +19,10 @@ class SensorLogger : public Observer<imu_data_t> {
 public:
     void update(const imu_data_t &data) override
     {
-        printf("angle:%.3f %.3f %.3f\r\n", data.angle.data[0], data.angle.data[1], data.angle.data[2]);
-        printf("acc:%.3f %.3f %.3f\r\n", data.acc.data[0], data.acc.data[1], data.acc.data[2]);
-        printf("gyro:%.3f %.3f %.3f\r\n", data.gyro.data[0], data.gyro.data[1], data.gyro.data[2]);
+        printf( "angle:%8.3f %8.3f %8.3f\r\n", data.angle.data[0], data.angle.data[1], data.angle.data[2]);
+        printf( "acc:  %8.3f %8.3f %8.3f\r\n", data.acc.data[0], data.acc.data[1], data.acc.data[2]);
+        printf( "gyro: %8.3f %8.3f %8.3f\r\n", data.gyro.data[0], data.gyro.data[1], data.gyro.data[2]);
+        printf("\r\n");
     }
 };
 

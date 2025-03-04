@@ -45,11 +45,11 @@
 
 <script>
 export default {
-  name: "App",
+  name: 'App',
   data() {
     return {
       drawer: null
-    };
+    }
   }
-};
+}
 </script>

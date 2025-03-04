@@ -24,12 +24,12 @@
 #if CONFIG_EXAMPLE_WEB_DEPLOY_SD
 #include "driver/sdmmc_host.h"
 #endif
+#include "rest_server.h"
 
 #define MDNS_INSTANCE "esp home web server"
 
 static const char *TAG = "web";
 
-esp_err_t start_rest_server(const char *base_path);
 
 static void initialise_mdns(void)
 {
@@ -152,10 +152,12 @@ static void wifi_init_softap(void)
     wifi_config_t wifi_config = {
         .ap = {
             .ssid = EXAMPLE_ESP_WIFI_SSID,
-            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
             .password = EXAMPLE_ESP_WIFI_PASS,
+            .ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
+            .channel = 0,
+            .authmode = WIFI_AUTH_WPA_WPA2_PSK,
+            .ssid_hidden = 0,
             .max_connection = 2,
-            .authmode = WIFI_AUTH_WPA_WPA2_PSK
         },
     };
     if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
@@ -163,7 +165,7 @@ static void wifi_init_softap(void)
     }
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
-    ESP_ERROR_CHECK(esp_wifi_set_config(ESP_IF_WIFI_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_config((wifi_interface_t)ESP_IF_WIFI_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
 
     esp_netif_ip_info_t ip_info;
@@ -191,5 +193,6 @@ void start_web(void)
 
     // ESP_ERROR_CHECK(example_connect());
     ESP_ERROR_CHECK(init_fs());
-    ESP_ERROR_CHECK(start_rest_server(CONFIG_EXAMPLE_WEB_MOUNT_POINT));
+    WebServer *webServer = new WebServer(CONFIG_EXAMPLE_WEB_MOUNT_POINT);
+    ESP_ERROR_CHECK(webServer->start());
 }

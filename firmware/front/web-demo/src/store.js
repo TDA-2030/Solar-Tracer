@@ -6,23 +6,39 @@ Vue.use(Vuex)
 
 export default new Vuex.Store({
   state: {
-    chart_value: [8, 2, 5, 9, 5, 11, 3, 5, 10, 0, 1, 8, 2, 9, 0, 13, 10, 7, 16],
+    accelerationData: Array(20).fill({ x: 0, y: 0, z: 0 }),
+    angleData: Array(20).fill({ x: 0, y: 0, z: 0 })
   },
   mutations: {
-    update_chart_value(state, new_value) {
-      state.chart_value.push(new_value);
-      state.chart_value.shift();
+    updateAccelerationData(state, newData) {
+      state.accelerationData.push(newData)
+      if (state.accelerationData.length > 20) {
+        state.accelerationData.shift()
+      }
+    },
+    updateAngleData(state, newData) {
+      state.angleData.push(newData)
+      if (state.angleData.length > 20) {
+        state.angleData.shift()
+      }
     }
   },
   actions: {
-    update_chart_value({ commit }) {
-      axios.get("/api/v1/temp/raw")
-        .then(data => {
-          commit("update_chart_value", data.data.raw);
+    fetchData({ commit }) {
+      axios.get('/api/v1/temp/raw')
+        .then(response => {
+          const data = response.data
+          // Expected data format:
+          // {
+          //   acceleration: { time: 'HH:mm:ss', x: number, y: number, z: number },
+          //   angle: { time: 'HH:mm:ss', x: number, y: number, z: number }
+          // }
+          commit('updateAccelerationData', data.acceleration)
+          commit('updateAngleData', data.angle)
         })
         .catch(error => {
-          console.log(error);
-        });
+          console.error(error)
+        })
     }
   }
 })

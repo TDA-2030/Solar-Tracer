@@ -11,7 +11,7 @@
 
 static const char *TAG = "app_main";
 
-static Gimbal gimbal;
+Gimbal gimbal;
 
 #define TIME_ZONE (+8)   //Beijing Time
 #define YEAR_BASE (2000) //date in GPS starts from 2000
@@ -49,6 +49,7 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
     }
 }
 
+void start_web(void);
 
 
 extern "C" void app_main()
@@ -89,6 +90,5 @@ extern "C" void app_main()
 
     gimbal.init();
 
-void start_web(void);
-start_web();
+    start_web();
 }

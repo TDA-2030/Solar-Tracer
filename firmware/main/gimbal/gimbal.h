@@ -35,11 +35,11 @@ public:
     void setTarget(float pitch, float roll, float yaw);
 
     void update(const imu_data_t &data) override;
+    std::shared_ptr<IMU> imu;
 private:
 
     struct pid positionPID[3], velocityPID[3];
 
-    std::shared_ptr<IMU> imu;
     Motor *rollMotor;
     Motor *pitchMotor;
     Motor *yawMotor;

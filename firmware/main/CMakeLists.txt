@@ -5,10 +5,15 @@ file(GLOB_RECURSE CPP_SOURCES "${CMAKE_CURRENT_LIST_DIR}/*.cpp")
 idf_component_register(SRCS 
     ${SOURCES} ${CPP_SOURCES}
 
-    INCLUDE_DIRS . wit_imu nmea0183 gimbal
+    INCLUDE_DIRS 
+    . 
+    wit_imu 
+    nmea0183 
+    gimbal 
+
 )
 
-target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-format -Wno-empty-body)
+target_compile_options(${COMPONENT_LIB} PRIVATE -Wno-format -Wno-empty-body -Wno-error=jump-misses-init)
 
 
 if(CONFIG_EXAMPLE_WEB_DEPLOY_SF)

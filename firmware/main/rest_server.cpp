@@ -14,6 +14,7 @@
 #include "esp_log.h"
 #include "esp_vfs.h"
 #include "cJSON.h"
+#include "rest_server.h"
 
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
@@ -156,72 +157,107 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
 }
 
 /* Simple handler for getting temperature data */
-static esp_err_t temperature_data_get_handler(httpd_req_t *req)
+static esp_err_t imu_data_get_handler(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "application/json");
+
+    // 创建根对象
     cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "raw", esp_random() % 20);
-    const char *sys_info = cJSON_Print(root);
-    httpd_resp_sendstr(req, sys_info);
-    free((void *)sys_info);
+
+    // 创建 acceleration 对象
+    cJSON *acceleration = cJSON_CreateObject();
+    cJSON_AddStringToObject(acceleration, "time", "12:30:45");
+    cJSON_AddNumberToObject(acceleration, "x", gimbal.imu->imu_data.acc.x);
+    cJSON_AddNumberToObject(acceleration, "y", gimbal.imu->imu_data.acc.y);
+    cJSON_AddNumberToObject(acceleration, "z", gimbal.imu->imu_data.acc.z);
+
+    // 创建 angle 对象
+    cJSON *angle = cJSON_CreateObject();
+    cJSON_AddStringToObject(angle, "time", "12:30:45");
+    cJSON_AddNumberToObject(angle, "x", gimbal.imu->imu_data.angle.x);
+    cJSON_AddNumberToObject(angle, "y", gimbal.imu->imu_data.angle.y);
+    cJSON_AddNumberToObject(angle, "z", gimbal.imu->imu_data.angle.z);
+
+    // 将 acceleration 和 angle 添加到根对象
+    cJSON_AddItemToObject(root, "acceleration", acceleration);
+    cJSON_AddItemToObject(root, "angle", angle);
+
+    // 打印 JSON 字符串
+    const char *json_string = cJSON_Print(root);
+    httpd_resp_sendstr(req, json_string);
+
+    // 释放内存
+    free((void *)json_string);
     cJSON_Delete(root);
     ESP_LOGI(REST_TAG, "Temperature data sent");
     return ESP_OK;
 }
 
-esp_err_t start_rest_server(const char *base_path)
+
+WebServer::WebServer(const char *base_path)
 {
+    this->base_path = base_path;
+    sensorWeb = std::make_shared<SensorWeb>();
+    gimbal.imu->registerObserver(sensorWeb);
+}
+
+
+WebServer::~WebServer()
+{
+    
+}
+
+esp_err_t WebServer::on(const char*url, httpd_method_t method, httpd_uri_handler_t handler, void* user_ctx)
+{
+    httpd_uri_t _uri = {
+        .uri = url,
+        .method = method,
+        .handler = handler,
+        .user_ctx = user_ctx,
+    };
+    return httpd_register_uri_handler(server, &_uri);
+}
+
+
+esp_err_t WebServer::start()
+{
+    rest_server_context_t *rest_context = NULL;
+    httpd_config_t config;
+
     REST_CHECK(base_path, "wrong base path", err);
-    rest_server_context_t *rest_context = calloc(1, sizeof(rest_server_context_t));
+
+    rest_context = (rest_server_context_t *)calloc(1, sizeof(rest_server_context_t));
     REST_CHECK(rest_context, "No memory for rest context", err);
     strlcpy(rest_context->base_path, base_path, sizeof(rest_context->base_path));
 
-    httpd_handle_t server = NULL;
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();
+    config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     ESP_LOGI(REST_TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
 
     /* URI handler for fetching system info */
-    httpd_uri_t system_info_get_uri = {
-        .uri = "/api/v1/system/info",
-        .method = HTTP_GET,
-        .handler = system_info_get_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &system_info_get_uri);
+    on("/api/v1/system/info", HTTP_GET, system_info_get_handler, rest_context);
 
     /* URI handler for fetching temperature data */
-    httpd_uri_t temperature_data_get_uri = {
-        .uri = "/api/v1/temp/raw",
-        .method = HTTP_GET,
-        .handler = temperature_data_get_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &temperature_data_get_uri);
+    on("/api/v1/temp/raw", HTTP_GET, imu_data_get_handler, rest_context);
 
     /* URI handler for light brightness control */
-    httpd_uri_t light_brightness_post_uri = {
-        .uri = "/api/v1/light/brightness",
-        .method = HTTP_POST,
-        .handler = light_brightness_post_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &light_brightness_post_uri);
+    on("/api/v1/light/brightness", HTTP_POST, light_brightness_post_handler, rest_context);
 
     /* URI handler for getting web server files */
-    httpd_uri_t common_get_uri = {
-        .uri = "/*",
-        .method = HTTP_GET,
-        .handler = rest_common_get_handler,
-        .user_ctx = rest_context
-    };
-    httpd_register_uri_handler(server, &common_get_uri);
+    on("/*", HTTP_GET, rest_common_get_handler, rest_context);
 
     return ESP_OK;
 err_start:
     free(rest_context);
 err:
     return ESP_FAIL;
+}
+
+
+esp_err_t WebServer::stop()
+{
+    ESP_LOGW(REST_TAG, "Stopping HTTP Server");
+    return httpd_stop(server);
 }

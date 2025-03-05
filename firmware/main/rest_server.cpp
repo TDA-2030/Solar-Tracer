@@ -28,7 +28,7 @@ static const char *REST_TAG = "esp-rest";
     } while (0)
 
 #define FILE_PATH_MAX (ESP_VFS_PATH_MAX + 128)
-#define SCRATCH_BUFSIZE (10240)
+#define SCRATCH_BUFSIZE (1024*20)
 
 typedef struct rest_server_context {
     char base_path[ESP_VFS_PATH_MAX + 1];
@@ -107,8 +107,40 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-/* Simple handler for light brightness control */
-static esp_err_t light_brightness_post_handler(httpd_req_t *req)
+static void cjson_add_num_as_str(cJSON *obj, const char *name, double number)
+{
+    char buffer[10];
+    snprintf(buffer, sizeof(buffer), "%.2f", number);  // 保留 2 位小数
+    cJSON_AddStringToObject(obj, name, buffer);
+}
+
+/* json format of setting */
+/*
+{
+    pid:{
+        pos:{
+            p:0.1,
+            i:0.1,
+            d:0.1,
+        },
+        vel:{
+            p:0.1,
+            i:0.1,
+            d:0.1,
+        },
+    },
+    mode:"auto",
+    th:{
+        maxv:12.1,
+        minv:10.1,
+    },
+    man:{
+        pitch:20,
+        yaw:30,
+    },
+}
+*/
+static esp_err_t setting_post_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
     int cur_len = 0;
@@ -131,12 +163,106 @@ static esp_err_t light_brightness_post_handler(httpd_req_t *req)
     buf[total_len] = '\0';
 
     cJSON *root = cJSON_Parse(buf);
-    int red = cJSON_GetObjectItem(root, "red")->valueint;
-    int green = cJSON_GetObjectItem(root, "green")->valueint;
-    int blue = cJSON_GetObjectItem(root, "blue")->valueint;
-    ESP_LOGI(REST_TAG, "Light control: red = %d, green = %d, blue = %d", red, green, blue);
+    if (!root) {
+        printf("Error parsing JSON!\n");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error parsing JSON!");
+        return ESP_FAIL;
+    }
+    
+    // 解析 pid
+    cJSON *pid = cJSON_GetObjectItem(root, "pid");
+    if (pid) {
+        cJSON *pos = cJSON_GetObjectItem(pid, "pos");
+        cJSON *vel = cJSON_GetObjectItem(pid, "vel");
+        if (pos) {
+            gimbal.positionPID->param.p=cJSON_GetObjectItem(pos, "p")->valuedouble;
+            gimbal.positionPID->param.i=cJSON_GetObjectItem(pos, "i")->valuedouble;
+            gimbal.positionPID->param.d=cJSON_GetObjectItem(pos, "d")->valuedouble;
+        }
+        if (vel) {
+            gimbal.velocityPID->param.p=cJSON_GetObjectItem(vel, "p")->valuedouble;
+            gimbal.velocityPID->param.i=cJSON_GetObjectItem(vel, "i")->valuedouble;
+            gimbal.velocityPID->param.d=cJSON_GetObjectItem(vel, "d")->valuedouble;
+        }
+    }
+    
+    // 解析 mode
+    cJSON *mode = cJSON_GetObjectItem(root, "mode");
+    if (mode) {
+        printf("mode: %s\n", mode->valuestring);
+    }
+    
+    // 解析 th
+    cJSON *th = cJSON_GetObjectItem(root, "th");
+    if (th) {
+        printf("th: maxv=%.1f, minv=%.1f\n",
+               cJSON_GetObjectItem(th, "maxv")->valuedouble,
+               cJSON_GetObjectItem(th, "minv")->valuedouble);
+    }
+
+    // 解析 man
+    cJSON *man = cJSON_GetObjectItem(root, "man");
+    if (man) {
+        printf("man: pitch=%.1f, yaw=%.1f\n",
+               cJSON_GetObjectItem(man, "pitch")->valuedouble,
+               cJSON_GetObjectItem(man, "yaw")->valuedouble);
+    }
+    
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
+    return ESP_OK;
+}
+
+static esp_err_t setting_get_handler(httpd_req_t *req)
+{
+    httpd_resp_set_type(req, "application/json");
+
+    // 创建根对象
+    cJSON *root = cJSON_CreateObject();
+    
+    // 创建 pid 对象
+    cJSON *pid = cJSON_CreateObject();
+    cJSON *pos = cJSON_CreateObject();
+    cJSON *vel = cJSON_CreateObject();
+    
+    // 添加 pos 参数
+    cjson_add_num_as_str(pos, "p", gimbal.positionPID[0].param.p);
+    cjson_add_num_as_str(pos, "i", gimbal.positionPID[0].param.i);
+    cjson_add_num_as_str(pos, "d", gimbal.positionPID[0].param.d);
+    
+    // 添加 vel 参数
+    cjson_add_num_as_str(vel, "p", gimbal.velocityPID[0].param.p);
+    cjson_add_num_as_str(vel, "i", gimbal.velocityPID[0].param.i);
+    cjson_add_num_as_str(vel, "d", gimbal.velocityPID[0].param.d);
+    
+    // 组装 pid
+    cJSON_AddItemToObject(pid, "pos", pos);
+    cJSON_AddItemToObject(pid, "vel", vel);
+    cJSON_AddItemToObject(root, "pid", pid);
+    
+    // 添加 mode
+    cJSON_AddStringToObject(root, "mode", "auto");
+    
+    // 创建 th 对象
+    cJSON *th = cJSON_CreateObject();
+    cjson_add_num_as_str(th, "maxv", 12.1);
+    cjson_add_num_as_str(th, "minv", 10.1);
+    cJSON_AddItemToObject(root, "th", th);
+
+    // 创建 man 对象
+    cJSON *man = cJSON_CreateObject();
+    cjson_add_num_as_str(man, "pitch", 10);
+    cjson_add_num_as_str(man, "yaw", 13);
+    cJSON_AddItemToObject(root, "man", man);
+    
+    // 打印 JSON 字符串
+    char *json_string = cJSON_Print(root);
+    // printf("%s\n", json_string);
+    httpd_resp_sendstr(req, json_string);
+    
+    // 释放内存
+    free((void *)json_string);
+    cJSON_Delete(root);
     return ESP_OK;
 }
 
@@ -156,6 +282,9 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
+
+
+
 /* Simple handler for getting temperature data */
 static esp_err_t imu_data_get_handler(httpd_req_t *req)
 {
@@ -164,25 +293,17 @@ static esp_err_t imu_data_get_handler(httpd_req_t *req)
     // 创建根对象
     cJSON *root = cJSON_CreateObject();
 
-    char buffer[20];
-
     // 创建 acceleration 对象
     cJSON *acceleration = cJSON_CreateObject();
-    sprintf(buffer, "%.2f", gimbal.imu->imu_data.acc.x);  // 保留 2 位小数
-    cJSON_AddStringToObject(acceleration, "x", buffer);
-    sprintf(buffer, "%.2f", gimbal.imu->imu_data.acc.y);
-    cJSON_AddStringToObject(acceleration, "y", buffer);
-    sprintf(buffer, "%.2f", gimbal.imu->imu_data.acc.z);
-    cJSON_AddStringToObject(acceleration, "z", buffer);
+    cjson_add_num_as_str(acceleration, "x", gimbal.imu->imu_data.acc.x);
+    cjson_add_num_as_str(acceleration, "y", gimbal.imu->imu_data.acc.y);
+    cjson_add_num_as_str(acceleration, "z", gimbal.imu->imu_data.acc.z);
 
     // 创建 angle 对象
     cJSON *angle = cJSON_CreateObject();
-    sprintf(buffer, "%.2f", gimbal.imu->imu_data.angle.x);  // 保留 2 位小数
-    cJSON_AddStringToObject(angle, "x", buffer);
-    sprintf(buffer, "%.2f", gimbal.imu->imu_data.angle.y);
-    cJSON_AddStringToObject(angle, "y", buffer);
-    sprintf(buffer, "%.2f", gimbal.imu->imu_data.angle.z);
-    cJSON_AddStringToObject(angle, "z", buffer);
+    cjson_add_num_as_str(angle, "x", gimbal.imu->imu_data.angle.x);
+    cjson_add_num_as_str(angle, "y", gimbal.imu->imu_data.angle.y);
+    cjson_add_num_as_str(angle, "z", gimbal.imu->imu_data.angle.z);
 
     // 将 acceleration 和 angle 添加到根对象
     cJSON_AddItemToObject(root, "acc", acceleration);
@@ -241,16 +362,9 @@ esp_err_t WebServer::start()
     ESP_LOGI(REST_TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
 
-    /* URI handler for fetching system info */
-    on("/api/v1/system/info", HTTP_GET, system_info_get_handler, rest_context);
-
-    /* URI handler for fetching temperature data */
+    on("/api/v1/setting", HTTP_GET, setting_get_handler, rest_context);
+    on("/api/v1/setting", HTTP_POST, setting_post_handler, rest_context);
     on("/api/v1/temp/raw", HTTP_GET, imu_data_get_handler, rest_context);
-
-    /* URI handler for light brightness control */
-    on("/api/v1/light/brightness", HTTP_POST, light_brightness_post_handler, rest_context);
-
-    /* URI handler for getting web server files */
     on("/*", HTTP_GET, rest_common_get_handler, rest_context);
 
     return ESP_OK;

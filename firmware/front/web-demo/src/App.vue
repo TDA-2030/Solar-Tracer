@@ -1,55 +1,36 @@
 <template>
-  <v-app id="inspire">
-    <v-navigation-drawer v-model="drawer" fixed app clipped>
-      <v-list dense>
-        <v-list-tile to="/">
-          <v-list-tile-action>
-            <v-icon>home</v-icon>
-          </v-list-tile-action>
-          <v-list-tile-content>
-            <v-list-tile-title>Home</v-list-tile-title>
-          </v-list-tile-content>
-        </v-list-tile>
-        <v-list-tile to="/chart">
-          <v-list-tile-action>
-            <v-icon>show_chart</v-icon>
-          </v-list-tile-action>
-          <v-list-tile-content>
-            <v-list-tile-title>Chart</v-list-tile-title>
-          </v-list-tile-content>
-        </v-list-tile>
-        <v-list-tile to="/light">
-          <v-list-tile-action>
-            <v-icon>highlight</v-icon>
-          </v-list-tile-action>
-          <v-list-tile-content>
-            <v-list-tile-title>Light</v-list-tile-title>
-          </v-list-tile-content>
-        </v-list-tile>
+  <v-app>
+    <v-app-bar color="primary">
+      <v-app-bar-nav-icon @click="drawer = !drawer"></v-app-bar-nav-icon>
+      <v-toolbar-title>Solar Tracker</v-toolbar-title>
+    </v-app-bar>
+
+    <v-navigation-drawer v-model="drawer" bottom absolute temporary>
+      <v-list dense nav>
+        <v-list-item v-for="(item, i) in navItems" :key="i" :value="item" :to="item.route">
+          <template v-slot:prepend>
+            <v-icon :icon="item.icon"></v-icon>
+          </template>
+          <v-list-item-title>{{ item.text }}</v-list-item-title>
+        </v-list-item>
       </v-list>
     </v-navigation-drawer>
-    <v-toolbar color="red accent-4" dark fixed app clipped-left>
-      <v-toolbar-side-icon @click.stop="drawer = !drawer"></v-toolbar-side-icon>
-      <v-toolbar-title>ESP Home</v-toolbar-title>
-    </v-toolbar>
-    <v-content>
-      <v-container fluid fill-height>
-        <router-view></router-view>
-      </v-container>
-    </v-content>
-    <v-footer color="red accent-4" app fixed>
-      <span class="white--text">&copy; ESPRESSIF SYSTEMS (SHANGHAI) CO., LTD. All rights reserved.</span>
-    </v-footer>
+
+    <v-main>
+      <router-view></router-view>
+    </v-main>
   </v-app>
 </template>
 
-<script>
-export default {
-  name: 'App',
-  data() {
-    return {
-      drawer: null
-    }
-  }
-}
+<script setup>
+import { ref } from 'vue'
+
+const drawer = ref(true)
+const navItems = [
+  { text: 'Home', icon: 'home', route: '/' },
+  { text: 'Control', icon: 'highlight', route: '/control' },
+  { text: 'Analysis', icon: 'show_chart', route: '/analysis' },
+]
 </script>
+
+<style scoped></style>

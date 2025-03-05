@@ -101,7 +101,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     } while (read_bytes > 0);
     /* Close file after sending complete */
     close(fd);
-    ESP_LOGI(REST_TAG, "File sending complete");
+    ESP_LOGI(REST_TAG, "File %s sending complete", filepath);
     /* Respond with an empty chunk to signal HTTP response completion */
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
@@ -164,22 +164,28 @@ static esp_err_t imu_data_get_handler(httpd_req_t *req)
     // 创建根对象
     cJSON *root = cJSON_CreateObject();
 
+    char buffer[20];
+
     // 创建 acceleration 对象
     cJSON *acceleration = cJSON_CreateObject();
-    cJSON_AddStringToObject(acceleration, "time", "12:30:45");
-    cJSON_AddNumberToObject(acceleration, "x", gimbal.imu->imu_data.acc.x);
-    cJSON_AddNumberToObject(acceleration, "y", gimbal.imu->imu_data.acc.y);
-    cJSON_AddNumberToObject(acceleration, "z", gimbal.imu->imu_data.acc.z);
+    sprintf(buffer, "%.2f", gimbal.imu->imu_data.acc.x);  // 保留 2 位小数
+    cJSON_AddStringToObject(acceleration, "x", buffer);
+    sprintf(buffer, "%.2f", gimbal.imu->imu_data.acc.y);
+    cJSON_AddStringToObject(acceleration, "y", buffer);
+    sprintf(buffer, "%.2f", gimbal.imu->imu_data.acc.z);
+    cJSON_AddStringToObject(acceleration, "z", buffer);
 
     // 创建 angle 对象
     cJSON *angle = cJSON_CreateObject();
-    cJSON_AddStringToObject(angle, "time", "12:30:45");
-    cJSON_AddNumberToObject(angle, "x", gimbal.imu->imu_data.angle.x);
-    cJSON_AddNumberToObject(angle, "y", gimbal.imu->imu_data.angle.y);
-    cJSON_AddNumberToObject(angle, "z", gimbal.imu->imu_data.angle.z);
+    sprintf(buffer, "%.2f", gimbal.imu->imu_data.angle.x);  // 保留 2 位小数
+    cJSON_AddStringToObject(angle, "x", buffer);
+    sprintf(buffer, "%.2f", gimbal.imu->imu_data.angle.y);
+    cJSON_AddStringToObject(angle, "y", buffer);
+    sprintf(buffer, "%.2f", gimbal.imu->imu_data.angle.z);
+    cJSON_AddStringToObject(angle, "z", buffer);
 
     // 将 acceleration 和 angle 添加到根对象
-    cJSON_AddItemToObject(root, "acceleration", acceleration);
+    cJSON_AddItemToObject(root, "acc", acceleration);
     cJSON_AddItemToObject(root, "angle", angle);
 
     // 打印 JSON 字符串
@@ -189,7 +195,6 @@ static esp_err_t imu_data_get_handler(httpd_req_t *req)
     // 释放内存
     free((void *)json_string);
     cJSON_Delete(root);
-    ESP_LOGI(REST_TAG, "Temperature data sent");
     return ESP_OK;
 }
 

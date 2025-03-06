@@ -18,7 +18,17 @@ export const useSolarStore = defineStore('solar', {
       elevation: 30,
       angleDeviation: 5,
       voltageMin: 20,
-      voltageMax: 30
+      voltageMax: 30,
+      pos_pid: {
+        Kp: 0.1,
+        Ki: 0.01,
+        Kd: 0.01,
+      },
+      vel_pid: {
+        Kp: 0.1,
+        Ki: 0.01,
+        Kd: 0.01,
+      }
     },
   }),
   actions: {
@@ -35,9 +45,9 @@ export const useSolarStore = defineStore('solar', {
       this.realtimeData.azimuth = newValues._angleData.x
       this.realtimeData.elevation = newValues._angleData.y
     },
-    setMode(newMode) {
-      this.mode = newMode
-    }
+    saveSettingData(newSet) {
+      this.controlData = newSet
+    },
   },
   getters: {
     // Remove unused getters

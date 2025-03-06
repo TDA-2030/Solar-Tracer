@@ -8,27 +8,55 @@ app.use(express.json());
 
 app.get('/v1/temp/raw', (req, res) => {
   const data = {
-    acceleration: { 
-      time: new Date().toLocaleTimeString(), 
-      x: (Math.random() * 2 - 1), 
-      y: (Math.random() * 2 - 1), 
-      z: (Math.random() * 2 - 1) 
+    acc: { 
+      // time: new Date().toLocaleTimeString(), 
+      x: (Math.random() * 2 - 1).toFixed(2), 
+      y: (Math.random() * 2 - 1).toFixed(2), 
+      z: (Math.random() * 2 - 1).toFixed(2) 
     },
     angle: { 
-      time: new Date().toLocaleTimeString(), 
-      x: (Math.random() * 360), 
-      y: (Math.random() * 360), 
-      z: (Math.random() * 360) 
+      // time: new Date().toLocaleTimeString(), 
+      x: (Math.random() * 360).toFixed(2), 
+      y: (Math.random() * 360).toFixed(2), 
+      z: (Math.random() * 360).toFixed(2) 
     }
   };
   res.json(data);
   console.log('Sent raw data', data);
 });
 
-app.post('/v1/light/brightness', (req, res) => {
-  const controlData = req.body.data;
-  console.log('Received control data:', controlData);
-  res.json({ message: 'Control data received', controlData });
+app.post('/v1/setting', (req, res) => {
+  const controlData = req.body;
+  console.log('Received setting data:', controlData);
+  res.json({ message: 'setting data received' });
+});
+
+app.get('/v1/setting', (req, res) => {
+  const data = {
+    pid: {
+      pos: {
+        p: 0.1,
+        i: 0.1,
+        d: 0.1,
+      },
+      vel: {
+        p: 0.1,
+        i: 0.1,
+        d: 0.1,
+      },
+    },
+    mode: "auto",
+    th: {
+      maxv: 12.1,
+      minv: 10.1,
+    },
+    man: {
+      pitch: 20,
+      yaw: 30,
+    },
+  };
+  res.json(data);
+  console.log('Sent setting data', data);
 });
 
 app.listen(port, () => {

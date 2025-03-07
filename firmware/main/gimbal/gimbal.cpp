@@ -23,13 +23,11 @@ Gimbal::~Gimbal()
 void Gimbal::init()
 {
     ESP_LOGI(TAG, "Gimbal initializing");
-    static Motor pitchMotor(0);
-    static Motor rollMotor(1);
 
     this->imu = std::make_shared<IMU>();
-    this->pitchMotor = &pitchMotor;
-    this->rollMotor = &rollMotor;
-    this->yawMotor = nullptr;
+    this->pitchMotor = std::make_shared<Motor>(0);
+    this->rollMotor = nullptr;
+    this->yawMotor = std::make_shared<Motor>(1);
 
     pid_struct_init(&positionPID[0], 100, 300, 0.01, 0, 0);
     pid_struct_init(&positionPID[1], 100, 300, 0.01, 0, 0);
@@ -54,14 +52,14 @@ void Gimbal::update(const imu_data_t &data)
 
     axis_t speed_target;
     axis_t output;
-    speed_target.x = pid_calculate(&positionPID[0], data.angle.x, rollTarget);
-    speed_target.y = pid_calculate(&positionPID[1], data.angle.y, pitchTarget);
+    speed_target.y = pid_calculate(&positionPID[0], data.angle.y, pitchTarget);
+    speed_target.z = pid_calculate(&positionPID[1], data.angle.z, yawTarget);
 
-    output.x = pid_calculate(&velocityPID[0], data.gyro.x, speed_target.x);
-    output.y = pid_calculate(&velocityPID[1], data.gyro.y, speed_target.y);
+    output.y = pid_calculate(&velocityPID[0], data.gyro.y, speed_target.y);
+    output.z = pid_calculate(&velocityPID[1], data.gyro.z, speed_target.z);
 
-    pitchMotor->set_pwm(output.x);
-    rollMotor->set_pwm(output.y);
+    pitchMotor->set_pwm(output.y);
+    yawMotor->set_pwm(output.z);
 
 }
 

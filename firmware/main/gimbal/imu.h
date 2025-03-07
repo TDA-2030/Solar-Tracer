@@ -6,7 +6,7 @@
 
 // 绕IMU的Z轴旋转：航向角yaw， 转动 y 角度
 // 绕IMU的Y轴旋转：俯仰角pitch，转动 p 角度
-// 绕IMU的X轴旋转：横滚角row， 转动 r 角度
+// 绕IMU的X轴旋转：横滚角roll， 转动 r 角度
 typedef union {
     struct {
         float x;

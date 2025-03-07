@@ -273,8 +273,11 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
     cJSON *root = cJSON_CreateObject();
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
-    cJSON_AddStringToObject(root, "version", IDF_VER);
+    cJSON_AddStringToObject(root, "idfversion", IDF_VER);
+    cJSON_AddStringToObject(root, "chip", CONFIG_IDF_TARGET);
     cJSON_AddNumberToObject(root, "cores", chip_info.cores);
+    cJSON_AddStringToObject(root, "compile date", __DATE__);
+    cJSON_AddStringToObject(root, "compile time", __TIME__);
     const char *sys_info = cJSON_Print(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);
@@ -283,9 +286,7 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
 }
 
 
-
-
-/* Simple handler for getting temperature data */
+/* Simple handler for getting imu data */
 static esp_err_t imu_data_get_handler(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "application/json");
@@ -323,10 +324,7 @@ static esp_err_t imu_data_get_handler(httpd_req_t *req)
 WebServer::WebServer(const char *base_path)
 {
     this->base_path = base_path;
-    sensorWeb = std::make_shared<SensorWeb>();
-    gimbal.imu->registerObserver(sensorWeb);
 }
-
 
 WebServer::~WebServer()
 {
@@ -343,7 +341,6 @@ esp_err_t WebServer::on(const char*url, httpd_method_t method, httpd_uri_handler
     };
     return httpd_register_uri_handler(server, &_uri);
 }
-
 
 esp_err_t WebServer::start()
 {
@@ -362,6 +359,7 @@ esp_err_t WebServer::start()
     ESP_LOGI(REST_TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
 
+    on("/api/v1/sysinfo", HTTP_GET, system_info_get_handler, rest_context);
     on("/api/v1/setting", HTTP_GET, setting_get_handler, rest_context);
     on("/api/v1/setting", HTTP_POST, setting_post_handler, rest_context);
     on("/api/v1/temp/raw", HTTP_GET, imu_data_get_handler, rest_context);

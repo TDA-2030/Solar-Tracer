@@ -39,9 +39,9 @@ public:
     struct pid positionPID[3], velocityPID[3];
 private:
 
-    Motor *rollMotor;
-    Motor *pitchMotor;
-    Motor *yawMotor;
+    std::shared_ptr<Motor> rollMotor;
+    std::shared_ptr<Motor> pitchMotor;
+    std::shared_ptr<Motor> yawMotor;
 
     float rollTarget;
     float pitchTarget;

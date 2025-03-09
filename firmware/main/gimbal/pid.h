@@ -31,6 +31,7 @@ struct pid_param {
     float i;
     float d;
     float input_max_err;
+    float Kc;        // 补偿系数
 
     float max_out;
     float integral_limit;
@@ -52,26 +53,12 @@ struct pid {
     float dout;
     float out;
 
-    void (*f_param_init)(struct pid *pid,
-                         float max_output,
-                         float integral_limit,
-                         float p,
-                         float i,
-                         float d);
-    void (*f_pid_reset)(struct pid *pid, float p, float i, float d);
 };
 
 
-void pid_struct_init(
-    struct pid *pid,
-    float maxout,
-    float intergral_limit,
+void pid_struct_init(struct pid *pid, const struct pid_param *_param);
 
-    float kp,
-    float ki,
-    float kd);
-
-float pid_calculate(struct pid *pid, float fdb, float ref);
+float pid_calculate(struct pid *pid, float get, float set, float dt); // dt单位为s
 
 #ifdef __cplusplus
 }

@@ -8,6 +8,7 @@
 #include "nmea_parser.h"
 #include "board.h"
 #include "gimbal.h"
+#include "setting.h"
 
 static const char *TAG = "app_main";
 
@@ -62,6 +63,7 @@ extern "C" void app_main()
     }
     ESP_ERROR_CHECK( err );
 
+    g_settings.load();
 
     /* NMEA parser configuration */
     nmea_parser_config_t config = {

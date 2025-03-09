@@ -188,8 +188,9 @@ static void imu_task(void *pvParameters)
             WitSerialDataIn(ucTemp);
         }
 #else
-        if (WitReadReg(AX, 13) != WIT_HAL_OK) {
-            ESP_LOGE(TAG, "imu read error");
+        int ret = WitReadReg(AX, 13); // 读取传感器数据
+        if (ret != WIT_HAL_OK) {
+            ESP_LOGE(TAG, "imu read error (%d)", ret);
         }
         Delayms(20);
 #endif
@@ -199,7 +200,11 @@ static void imu_task(void *pvParameters)
 IMU::IMU()
 {
     ESP_LOGI(TAG, "imu initializing");
+#if IMU_USE_UART
+    WitInit(WIT_PROTOCOL_NORMAL, 0x50);
+#else
     WitInit(WIT_PROTOCOL_I2C, 0x50);
+#endif
     WitRegisterCallBack(SensorDataUpdata);
     WitDelayMsRegister(Delayms);
 #if IMU_USE_UART

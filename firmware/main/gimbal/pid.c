@@ -17,49 +17,14 @@
 #include <math.h>
 #include "pid.h"
 
-static inline void abs_limit(float *a, float ABS_MAX)
+static inline void abs_limit(float *a, float ABS_MAX, float ABS_MIN)
 {
     if (*a > ABS_MAX) {
         *a = ABS_MAX;
     }
-    if (*a < -ABS_MAX) {
-        *a = -ABS_MAX;
+    if (*a < ABS_MIN) {
+        *a = ABS_MIN;
     }
-}
-
-static void pid_param_init(
-    struct pid *pid,
-    float maxout,
-    float integral_limit,
-    float kp,
-    float ki,
-    float kd)
-{
-
-    pid->param.integral_limit = integral_limit;
-    pid->param.max_out = maxout;
-
-    pid->param.p = kp;
-    pid->param.i = ki;
-    pid->param.d = kd;
-}
-
-/**
-  * @brief     modify pid parameter when code running
-  * @param[in] pid: control pid struct
-  * @param[in] p/i/d: pid parameter
-  * @retval    none
-  */
-static void pid_reset(struct pid *pid, float kp, float ki, float kd)
-{
-    pid->param.p = kp;
-    pid->param.i = ki;
-    pid->param.d = kd;
-
-    pid->pout = 0;
-    pid->iout = 0;
-    pid->dout = 0;
-    pid->out = 0;
 }
 
 /**
@@ -69,7 +34,7 @@ static void pid_reset(struct pid *pid, float kp, float ki, float kd)
   * @param[in] set: target value
   * @retval    pid calculate output
   */
-float pid_calculate(struct pid *pid, float get, float set)
+float pid_calculate(struct pid *pid, float get, float set, float dt)
 {
     pid->get = get;
     pid->set = set;
@@ -79,12 +44,16 @@ float pid_calculate(struct pid *pid, float get, float set)
     }
 
     pid->pout = pid->param.p * pid->err;
-    pid->iout += pid->param.i * pid->err;
-    pid->dout = pid->param.d * (pid->err - pid->last_err);
+    pid->iout += pid->param.i * pid->err * dt;
+    pid->dout = pid->param.d * (pid->err - pid->last_err) / dt;
 
-    abs_limit(&(pid->iout), pid->param.integral_limit);
     pid->out = pid->pout + pid->iout + pid->dout;
-    abs_limit(&(pid->out), pid->param.max_out);
+    float u_unlimited = pid->out;
+    abs_limit(&(pid->iout), pid->param.integral_limit, -pid->param.integral_limit);
+    abs_limit(&(pid->out), pid->param.max_out, -pid->param.max_out);
+    // 反向计算修正积分项
+    float e_back = (pid->out - u_unlimited) * pid->param.Kc;
+    pid->iout += ( e_back) * dt;  // 修正积分累积
 
     if (pid->enable == 0) {
         pid->out = 0;
@@ -92,23 +61,21 @@ float pid_calculate(struct pid *pid, float get, float set)
 
     return pid->out;
 }
+
 /**
   * @brief     initialize pid parameter
   * @retval    none
   */
-void pid_struct_init(
-    struct pid *pid,
-    float maxout,
-    float integral_limit,
-
-    float kp,
-    float ki,
-    float kd)
+void pid_struct_init(struct pid *pid, const struct pid_param *_param)
 {
     pid->enable = 1;
-    pid->f_param_init = pid_param_init;
-    pid->f_pid_reset = pid_reset;
 
-    pid->f_param_init(pid, maxout, integral_limit, kp, ki, kd);
-    pid->f_pid_reset(pid, kp, ki, kd);
+    pid->param = *_param;
+    pid->err = 0;
+    pid->last_err = 0;
+    
+    pid->pout = 0;
+    pid->iout = 0;
+    pid->dout = 0;
+    pid->out = 0;
 }

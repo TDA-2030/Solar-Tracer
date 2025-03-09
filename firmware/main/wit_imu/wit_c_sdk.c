@@ -342,6 +342,8 @@ int32_t WitReadReg(uint32_t uiReg, uint32_t uiReadNum)
                     sReg[i+uiReg] = ((uint16_t)s_ucWitDataBuff[(i<<1)+1] << 8) | s_ucWitDataBuff[i<<1];
                 }
                 p_WitRegUpdateCbFunc(uiReg, uiReadNum);
+            } else {
+                return WIT_HAL_ERROR;
             }
 			
             break;

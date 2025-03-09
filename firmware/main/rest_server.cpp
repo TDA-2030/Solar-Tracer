@@ -15,6 +15,7 @@
 #include "esp_vfs.h"
 #include "cJSON.h"
 #include "rest_server.h"
+#include "setting.h"
 
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
@@ -140,6 +141,8 @@ static void cjson_add_num_as_str(cJSON *obj, const char *name, double number)
     },
 }
 */
+static const float FACTOR = 20.0f;
+
 static esp_err_t setting_post_handler(httpd_req_t *req)
 {
     int total_len = req->content_len;
@@ -168,48 +171,65 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error parsing JSON!");
         return ESP_FAIL;
     }
-    
+    printf("Received JSON: %s\n", buf);
     // 解析 pid
     cJSON *pid = cJSON_GetObjectItem(root, "pid");
     if (pid) {
         cJSON *pos = cJSON_GetObjectItem(pid, "pos");
         cJSON *vel = cJSON_GetObjectItem(pid, "vel");
         if (pos) {
-            gimbal.positionPID->param.p=cJSON_GetObjectItem(pos, "p")->valuedouble;
-            gimbal.positionPID->param.i=cJSON_GetObjectItem(pos, "i")->valuedouble;
-            gimbal.positionPID->param.d=cJSON_GetObjectItem(pos, "d")->valuedouble;
+            gimbal.positionPID[0].param.p = cJSON_GetObjectItem(pos, "p")->valuedouble * FACTOR;
+            gimbal.positionPID[0].param.i = cJSON_GetObjectItem(pos, "i")->valuedouble * FACTOR;
+            gimbal.positionPID[0].param.d = cJSON_GetObjectItem(pos, "d")->valuedouble * FACTOR;
+            // gimbal.positionPID[0].param.Kc = gimbal.positionPID[0].param.i; // Kc = Ki
+            gimbal.positionPID[1].param.p = gimbal.positionPID[0].param.p;
+            gimbal.positionPID[1].param.i = gimbal.positionPID[0].param.i;
+            gimbal.positionPID[1].param.d = gimbal.positionPID[0].param.d;
+            g_settings.pos_pid = gimbal.positionPID[0].param;
         }
         if (vel) {
-            gimbal.velocityPID->param.p=cJSON_GetObjectItem(vel, "p")->valuedouble;
-            gimbal.velocityPID->param.i=cJSON_GetObjectItem(vel, "i")->valuedouble;
-            gimbal.velocityPID->param.d=cJSON_GetObjectItem(vel, "d")->valuedouble;
+            gimbal.velocityPID[0].param.p = cJSON_GetObjectItem(vel, "p")->valuedouble * FACTOR;
+            gimbal.velocityPID[0].param.i = cJSON_GetObjectItem(vel, "i")->valuedouble * FACTOR;
+            gimbal.velocityPID[0].param.d = cJSON_GetObjectItem(vel, "d")->valuedouble * FACTOR;
+            // gimbal.velocityPID[0].param.Kc = gimbal.velocityPID[0].param.i; // Kc = Ki
+            gimbal.velocityPID[1].param.p = gimbal.velocityPID[0].param.p;
+            gimbal.velocityPID[1].param.i = gimbal.velocityPID[0].param.i;
+            gimbal.velocityPID[1].param.d = gimbal.velocityPID[0].param.d;
+            g_settings.vel_pid = gimbal.velocityPID[0].param;
         }
     }
-    
+
     // 解析 mode
     cJSON *mode = cJSON_GetObjectItem(root, "mode");
     if (mode) {
-        printf("mode: %s\n", mode->valuestring);
+        if (strcmp(mode->valuestring, "manual") == 0) {
+            g_settings.mode = MODE_MANUAL;
+        } else if (strcmp(mode->valuestring, "auto") == 0) {
+            g_settings.mode = MODE_AUTO;
+        }
     }
-    
+
     // 解析 th
     cJSON *th = cJSON_GetObjectItem(root, "th");
     if (th) {
-        printf("th: maxv=%.1f, minv=%.1f\n",
-               cJSON_GetObjectItem(th, "maxv")->valuedouble,
-               cJSON_GetObjectItem(th, "minv")->valuedouble);
+        g_settings.vol_max = cJSON_GetObjectItem(th, "maxv")->valuedouble;
+        g_settings.vol_min = cJSON_GetObjectItem(th, "minv")->valuedouble;
     }
 
     // 解析 man
     cJSON *man = cJSON_GetObjectItem(root, "man");
     if (man) {
-        printf("man: pitch=%.1f, yaw=%.1f\n",
-               cJSON_GetObjectItem(man, "pitch")->valuedouble,
-               cJSON_GetObjectItem(man, "yaw")->valuedouble);
+        g_settings.target_pitch = cJSON_GetObjectItem(man, "pitch")->valuedouble;
+        g_settings.target_yaw = cJSON_GetObjectItem(man, "yaw")->valuedouble;
+        if (g_settings.mode == MODE_MANUAL) {
+            gimbal.setTarget(g_settings.target_pitch, 0, g_settings.target_yaw);
+        }
+
     }
-    
+
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
+    g_settings.save();
     return ESP_OK;
 }
 
@@ -219,47 +239,48 @@ static esp_err_t setting_get_handler(httpd_req_t *req)
 
     // 创建根对象
     cJSON *root = cJSON_CreateObject();
-    
+
     // 创建 pid 对象
     cJSON *pid = cJSON_CreateObject();
     cJSON *pos = cJSON_CreateObject();
     cJSON *vel = cJSON_CreateObject();
-    
+
     // 添加 pos 参数
-    cjson_add_num_as_str(pos, "p", gimbal.positionPID[0].param.p);
-    cjson_add_num_as_str(pos, "i", gimbal.positionPID[0].param.i);
-    cjson_add_num_as_str(pos, "d", gimbal.positionPID[0].param.d);
-    
+    cjson_add_num_as_str(pos, "p", gimbal.positionPID[0].param.p / FACTOR);
+    cjson_add_num_as_str(pos, "i", gimbal.positionPID[0].param.i / FACTOR);
+    cjson_add_num_as_str(pos, "d", gimbal.positionPID[0].param.d / FACTOR);
+
     // 添加 vel 参数
-    cjson_add_num_as_str(vel, "p", gimbal.velocityPID[0].param.p);
-    cjson_add_num_as_str(vel, "i", gimbal.velocityPID[0].param.i);
-    cjson_add_num_as_str(vel, "d", gimbal.velocityPID[0].param.d);
-    
+    cjson_add_num_as_str(vel, "p", gimbal.velocityPID[0].param.p / FACTOR);
+    cjson_add_num_as_str(vel, "i", gimbal.velocityPID[0].param.i / FACTOR);
+    cjson_add_num_as_str(vel, "d", gimbal.velocityPID[0].param.d / FACTOR);
+
     // 组装 pid
     cJSON_AddItemToObject(pid, "pos", pos);
     cJSON_AddItemToObject(pid, "vel", vel);
     cJSON_AddItemToObject(root, "pid", pid);
-    
+
     // 添加 mode
-    cJSON_AddStringToObject(root, "mode", "auto");
-    
+    cJSON_AddStringToObject(root, "mode", g_settings.mode == MODE_MANUAL ? "manual" : "auto");
+
     // 创建 th 对象
     cJSON *th = cJSON_CreateObject();
-    cjson_add_num_as_str(th, "maxv", 12.1);
-    cjson_add_num_as_str(th, "minv", 10.1);
+    cjson_add_num_as_str(th, "maxv", g_settings.vol_max);
+    cjson_add_num_as_str(th, "minv", g_settings.vol_min);
     cJSON_AddItemToObject(root, "th", th);
 
     // 创建 man 对象
     cJSON *man = cJSON_CreateObject();
-    cjson_add_num_as_str(man, "pitch", 10);
-    cjson_add_num_as_str(man, "yaw", 13);
+    cjson_add_num_as_str(man, "pitch", g_settings.target_pitch);
+    cjson_add_num_as_str(man, "yaw", g_settings.target_yaw);
     cJSON_AddItemToObject(root, "man", man);
-    
+
     // 打印 JSON 字符串
-    char *json_string = cJSON_Print(root);
-    // printf("%s\n", json_string);
+    char *json_string = cJSON_PrintUnformatted(root);
+    printf("%s\n", json_string);
+
     httpd_resp_sendstr(req, json_string);
-    
+
     // 释放内存
     free((void *)json_string);
     cJSON_Delete(root);
@@ -278,7 +299,7 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "cores", chip_info.cores);
     cJSON_AddStringToObject(root, "compile date", __DATE__);
     cJSON_AddStringToObject(root, "compile time", __TIME__);
-    const char *sys_info = cJSON_Print(root);
+    const char *sys_info = cJSON_PrintUnformatted(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);
     cJSON_Delete(root);
@@ -311,7 +332,7 @@ static esp_err_t imu_data_get_handler(httpd_req_t *req)
     cJSON_AddItemToObject(root, "angle", angle);
 
     // 打印 JSON 字符串
-    const char *json_string = cJSON_Print(root);
+    const char *json_string = cJSON_PrintUnformatted(root);
     httpd_resp_sendstr(req, json_string);
 
     // 释放内存
@@ -328,10 +349,10 @@ WebServer::WebServer(const char *base_path)
 
 WebServer::~WebServer()
 {
-    
+
 }
 
-esp_err_t WebServer::on(const char*url, httpd_method_t method, httpd_uri_handler_t handler, void* user_ctx)
+esp_err_t WebServer::on(const char *url, httpd_method_t method, httpd_uri_handler_t handler, void *user_ctx)
 {
     httpd_uri_t _uri = {
         .uri = url,

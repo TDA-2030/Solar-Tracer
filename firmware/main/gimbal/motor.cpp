@@ -12,6 +12,7 @@
 #include "freertos/timers.h"
 #include "driver/ledc.h"
 #include "esp_err.h"
+#include "esp_log.h"
 #include "board.h"
 #include "motor.h"
 
@@ -32,6 +33,7 @@ bool Motor::is_init = false;
 
 static void motor_init(void)
 {
+    ESP_LOGI("MOTOR", "Initializing motor...");
     // Prepare and then apply the LEDC PWM timer configuration
     ledc_timer_config_t ledc_timer = {
         .speed_mode       = LEDC_MODE,
@@ -83,21 +85,21 @@ Motor::Motor(uint8_t _mot_id) : mot_id(_mot_id)
 /**
  * @brief Set motor PWM
  * @note
- * @param mot_id motor id
  * @param percent PWM duty cycle, range from -1000 to 1000, 1000 means 100% duty cycle, miuns means reverse direction
  */
 void Motor::set_pwm(int32_t percent)
 {
+    percent = percent > 1000 ? 1000 : percent;
+    percent = percent < -1000 ? -1000 : percent;
     int32_t duty = percent * 1024 / 1000;
     int channel = LEDC_CHANNEL_0 + this->mot_id * 2;
     if(percent < 0)
     {
-        duty = -duty;
-        ledc_set_duty(LEDC_MODE, (ledc_channel_t)channel, duty);
+        ledc_set_duty(LEDC_MODE, (ledc_channel_t)channel, 1024 + duty);
         ledc_set_duty(LEDC_MODE, (ledc_channel_t)(channel + 1), 1024);
     } else {
         ledc_set_duty(LEDC_MODE, (ledc_channel_t)channel, 1024);
-        ledc_set_duty(LEDC_MODE, (ledc_channel_t)(channel + 1), duty);
+        ledc_set_duty(LEDC_MODE, (ledc_channel_t)(channel + 1), 1024 - duty);
     }
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, (ledc_channel_t)channel));
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, (ledc_channel_t)(channel + 1)));

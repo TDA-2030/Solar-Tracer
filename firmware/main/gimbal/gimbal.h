@@ -36,14 +36,12 @@ public:
 
     void update(const imu_data_t &data) override;
     std::shared_ptr<IMU> imu;
-    struct pid positionPID[3], velocityPID[3];
-private:
-
-    std::shared_ptr<Motor> rollMotor;
+    struct pid pitchPID;
     std::shared_ptr<Motor> pitchMotor;
     std::shared_ptr<Motor> yawMotor;
 
-    float rollTarget;
+private:
+
     float pitchTarget;
     float yawTarget;
 };

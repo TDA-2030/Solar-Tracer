@@ -16,6 +16,7 @@
 #include "cJSON.h"
 #include "rest_server.h"
 #include "setting.h"
+#include "adc.h"
 
 static const char *REST_TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
@@ -178,24 +179,18 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
         cJSON *pos = cJSON_GetObjectItem(pid, "pos");
         cJSON *vel = cJSON_GetObjectItem(pid, "vel");
         if (pos) {
-            gimbal.positionPID[0].param.p = cJSON_GetObjectItem(pos, "p")->valuedouble * FACTOR;
-            gimbal.positionPID[0].param.i = cJSON_GetObjectItem(pos, "i")->valuedouble * FACTOR;
-            gimbal.positionPID[0].param.d = cJSON_GetObjectItem(pos, "d")->valuedouble * FACTOR;
-            // gimbal.positionPID[0].param.Kc = gimbal.positionPID[0].param.i; // Kc = Ki
-            gimbal.positionPID[1].param.p = gimbal.positionPID[0].param.p;
-            gimbal.positionPID[1].param.i = gimbal.positionPID[0].param.i;
-            gimbal.positionPID[1].param.d = gimbal.positionPID[0].param.d;
-            g_settings.pos_pid = gimbal.positionPID[0].param;
+            g_settings.pos_pid.p = cJSON_GetObjectItem(pos, "p")->valuedouble * FACTOR;
+            g_settings.pos_pid.i = cJSON_GetObjectItem(pos, "i")->valuedouble * FACTOR;
+            g_settings.pos_pid.d = cJSON_GetObjectItem(pos, "d")->valuedouble * FACTOR;
+            gimbal.pitchMotor->positionPID.param = g_settings.pos_pid;
+            gimbal.yawMotor->positionPID.param = g_settings.pos_pid;
         }
         if (vel) {
-            gimbal.velocityPID[0].param.p = cJSON_GetObjectItem(vel, "p")->valuedouble * FACTOR;
-            gimbal.velocityPID[0].param.i = cJSON_GetObjectItem(vel, "i")->valuedouble * FACTOR;
-            gimbal.velocityPID[0].param.d = cJSON_GetObjectItem(vel, "d")->valuedouble * FACTOR;
-            // gimbal.velocityPID[0].param.Kc = gimbal.velocityPID[0].param.i; // Kc = Ki
-            gimbal.velocityPID[1].param.p = gimbal.velocityPID[0].param.p;
-            gimbal.velocityPID[1].param.i = gimbal.velocityPID[0].param.i;
-            gimbal.velocityPID[1].param.d = gimbal.velocityPID[0].param.d;
-            g_settings.vel_pid = gimbal.velocityPID[0].param;
+            g_settings.vel_pid.p = cJSON_GetObjectItem(vel, "p")->valuedouble * FACTOR;
+            g_settings.vel_pid.i = cJSON_GetObjectItem(vel, "i")->valuedouble * FACTOR;
+            g_settings.vel_pid.d = cJSON_GetObjectItem(vel, "d")->valuedouble * FACTOR;
+            gimbal.pitchMotor->velocityPID.param = g_settings.vel_pid;
+            gimbal.yawMotor->velocityPID.param = g_settings.vel_pid;
         }
     }
 
@@ -246,14 +241,14 @@ static esp_err_t setting_get_handler(httpd_req_t *req)
     cJSON *vel = cJSON_CreateObject();
 
     // 添加 pos 参数
-    cjson_add_num_as_str(pos, "p", gimbal.positionPID[0].param.p / FACTOR);
-    cjson_add_num_as_str(pos, "i", gimbal.positionPID[0].param.i / FACTOR);
-    cjson_add_num_as_str(pos, "d", gimbal.positionPID[0].param.d / FACTOR);
+    cjson_add_num_as_str(pos, "p", g_settings.pos_pid.p / FACTOR);
+    cjson_add_num_as_str(pos, "i", g_settings.pos_pid.i / FACTOR);
+    cjson_add_num_as_str(pos, "d", g_settings.pos_pid.d / FACTOR);
 
     // 添加 vel 参数
-    cjson_add_num_as_str(vel, "p", gimbal.velocityPID[0].param.p / FACTOR);
-    cjson_add_num_as_str(vel, "i", gimbal.velocityPID[0].param.i / FACTOR);
-    cjson_add_num_as_str(vel, "d", gimbal.velocityPID[0].param.d / FACTOR);
+    cjson_add_num_as_str(vel, "p", g_settings.vel_pid.p / FACTOR);
+    cjson_add_num_as_str(vel, "i", g_settings.vel_pid.i / FACTOR);
+    cjson_add_num_as_str(vel, "d", g_settings.vel_pid.d / FACTOR);
 
     // 组装 pid
     cJSON_AddItemToObject(pid, "pos", pos);
@@ -330,6 +325,8 @@ static esp_err_t imu_data_get_handler(httpd_req_t *req)
     // 将 acceleration 和 angle 添加到根对象
     cJSON_AddItemToObject(root, "acc", acceleration);
     cJSON_AddItemToObject(root, "angle", angle);
+
+    cjson_add_num_as_str(root, "vol", adc_read_voltage());
 
     // 打印 JSON 字符串
     const char *json_string = cJSON_PrintUnformatted(root);

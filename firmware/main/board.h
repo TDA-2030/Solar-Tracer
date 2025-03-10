@@ -10,8 +10,15 @@ extern "C" {
 
 #define BOARD_IO_MOTX_IN1 17
 #define BOARD_IO_MOTX_IN2 18
+#define BOARD_IO_MOTX_ENC_A 14
+#define BOARD_IO_MOTX_ENC_B 15
+
+
 #define BOARD_IO_MOTY_IN1 9
 #define BOARD_IO_MOTY_IN2 10
+#define BOARD_IO_MOTY_ENC_A 11
+#define BOARD_IO_MOTY_ENC_B 12
+
 
 #define BOARD_IO_GPS_RX 5
 #define BOARD_IO_GPS_TX 4

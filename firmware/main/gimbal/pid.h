@@ -47,6 +47,7 @@ struct pid {
 
     float err;
     float last_err;
+    float e_back;
 
     float pout;
     float iout;

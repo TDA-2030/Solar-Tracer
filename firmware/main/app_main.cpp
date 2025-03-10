@@ -9,6 +9,7 @@
 #include "board.h"
 #include "gimbal.h"
 #include "setting.h"
+#include "adc.h"
 
 static const char *TAG = "app_main";
 
@@ -64,6 +65,7 @@ extern "C" void app_main()
     ESP_ERROR_CHECK( err );
 
     g_settings.load();
+    adc_init();
 
     /* NMEA parser configuration */
     nmea_parser_config_t config = {
@@ -84,8 +86,7 @@ extern "C" void app_main()
 
     /** Determine whether to restore the settings by reading the restart count */
     int restart_cnt = restart_count_get();
-    ESP_LOGW(TAG, "Restart count=[%d]", restart_cnt);
-
+    ESP_LOGI(TAG, "Restart count=[%d]", restart_cnt);
     if (restart_cnt >= RESTART_COUNT_RESET) {
         ESP_LOGW(TAG, "Erase information saved in flash and restart");
     }

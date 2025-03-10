@@ -52,8 +52,8 @@ float pid_calculate(struct pid *pid, float get, float set, float dt)
     abs_limit(&(pid->iout), pid->param.integral_limit, -pid->param.integral_limit);
     abs_limit(&(pid->out), pid->param.max_out, -pid->param.max_out);
     // 反向计算修正积分项
-    float e_back = (pid->out - u_unlimited) * pid->param.Kc;
-    pid->iout += ( e_back) * dt;  // 修正积分累积
+    pid->e_back = (pid->out - u_unlimited) * pid->param.Kc;
+    pid->iout += ( pid->e_back) * dt;  // 修正积分累积
 
     if (pid->enable == 0) {
         pid->out = 0;

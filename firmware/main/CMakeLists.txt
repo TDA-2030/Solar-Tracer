@@ -7,7 +7,8 @@ idf_component_register(SRCS
 
     INCLUDE_DIRS 
     . 
-    wit_imu 
+    imu
+    wifi
     nmea0183 
     gimbal 
 

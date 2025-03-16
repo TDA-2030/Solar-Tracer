@@ -7,13 +7,14 @@
 */
 #pragma once
 
+#include <iostream>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "imu.h"
+#include "observer.hpp"
+#include "imu_bmi270.h"
 #include "motor.h"
 #include "pid.h"
-#include "observer.hpp"
-#include <iostream>
+#include "gps.h"
 
 class SensorLogger : public Observer<imu_data_t> {
 public:
@@ -27,18 +28,21 @@ public:
 };
 
 
-class Gimbal : public Observer<imu_data_t> {
+class Gimbal : public Observer<imu_data_t>, public Observer<gps_t> {
 public:
     Gimbal();
     ~Gimbal();
     void init();
     void setTarget(float pitch, float roll, float yaw);
 
+    void update(const gps_t &data) override;
     void update(const imu_data_t &data) override;
-    std::shared_ptr<IMU> imu;
+    std::shared_ptr<IMUBmi270> imu;
+    std::shared_ptr<GPS> gps;
     struct pid pitchPID;
     std::shared_ptr<Motor> pitchMotor;
     std::shared_ptr<Motor> yawMotor;
+    gps_t gpsData;
 
 private:
 

@@ -312,15 +312,15 @@ static esp_err_t imu_data_get_handler(httpd_req_t *req)
 
     // 创建 acceleration 对象
     cJSON *acceleration = cJSON_CreateObject();
-    cjson_add_num_as_str(acceleration, "x", gimbal.imu->imu_data.acc.x);
-    cjson_add_num_as_str(acceleration, "y", gimbal.imu->imu_data.acc.y);
-    cjson_add_num_as_str(acceleration, "z", gimbal.imu->imu_data.acc.z);
+    cjson_add_num_as_str(acceleration, "x", gimbal.imu->getData().acc.x);
+    cjson_add_num_as_str(acceleration, "y", gimbal.imu->getData().acc.y);
+    cjson_add_num_as_str(acceleration, "z", gimbal.imu->getData().acc.z);
 
     // 创建 angle 对象
     cJSON *angle = cJSON_CreateObject();
-    cjson_add_num_as_str(angle, "x", gimbal.imu->imu_data.angle.x);
-    cjson_add_num_as_str(angle, "y", gimbal.imu->imu_data.angle.y);
-    cjson_add_num_as_str(angle, "z", gimbal.imu->imu_data.angle.z);
+    cjson_add_num_as_str(angle, "x", gimbal.imu->getData().angle.x);
+    cjson_add_num_as_str(angle, "y", gimbal.imu->getData().angle.y);
+    cjson_add_num_as_str(angle, "z", gimbal.imu->getData().angle.z);
 
     // 将 acceleration 和 angle 添加到根对象
     cJSON_AddItemToObject(root, "acc", acceleration);

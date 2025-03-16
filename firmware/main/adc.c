@@ -35,7 +35,7 @@
 #define ADC_VREF_MV                          1100    // ADC reference voltage in mV
 #define ADC_MAX_VALUE                       ((1 << EXAMPLE_ADC_BIT_WIDTH) - 1)
 
-static const adc_channel_t channel[] = {ADC_CHANNEL_6};
+static const adc_channel_t channel[] = {ADC_CHANNEL_0};
 
 static const char *TAG = "adc";
 static adc_continuous_handle_t adc_handle = NULL;
@@ -82,6 +82,7 @@ void adc_init(void)
 
 float adc_read_voltage(void)
 {
+    return 1.0; // TODO: Implement ADC reading and conversion to voltage
     esp_err_t ret;
     uint32_t ret_num = 0;
     uint8_t result[EXAMPLE_READ_LEN] = {0};

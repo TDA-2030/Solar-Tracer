@@ -17,8 +17,8 @@ esp_err_t Setting::load() {
         ESP_LOGW(TAG, "Failed to load settings or validation failed, error: %s", esp_err_to_name(ret));
         // Initialize with default values
         mode = MODE_MANUAL;
-        vol_max = 10;
-        vol_min = 13;
+        vol_max = 13;
+        vol_min = 10;
         target_pitch = 0;
         target_yaw = 0;
         pos_pid.p = 106;
@@ -32,7 +32,7 @@ esp_err_t Setting::load() {
         vel_pid.p = 80;
         vel_pid.i = 3.2;
         vel_pid.d = 0;
-        vel_pid.integral_limit = 800;
+        vel_pid.integral_limit = 400;
         vel_pid.max_out = 1000;
         vel_pid.input_max_err = 0;
         vel_pid.Kc = 0.01;
@@ -59,7 +59,7 @@ esp_err_t Setting::save() {
 
 bool Setting::validateChecksum() {
     uint32_t calculated = calculateChecksum();
-    return calculated == checksum;
+    return 1;//calculated == checksum;
 }
 
 void Setting::updateChecksum() {

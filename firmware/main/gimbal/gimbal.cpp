@@ -1,14 +1,16 @@
 
+#include <memory>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
 #include "esp_log.h"
 #include "gimbal.h"
 #include "setting.h"
+#include "sun_pos.h"
 
 static const char *TAG = "gimbal";
 
-Gimbal::Gimbal(): imu(nullptr), pitchMotor(nullptr), yawMotor(nullptr),
+Gimbal::Gimbal(): imu(nullptr), gps(nullptr), pitchMotor(nullptr), yawMotor(nullptr),
     pitchTarget(0), yawTarget(0)
 
 {
@@ -25,10 +27,13 @@ void Gimbal::init()
 {
     ESP_LOGI(TAG, "Gimbal initializing");
 
-    this->imu = std::make_shared<IMU>();
-    this->pitchMotor = std::make_shared<Motor>(0, 11*200);
-    this->yawMotor = std::make_shared<Motor>(1, 11*200);
+    this->gps = std::make_shared<GPS>();
 
+    this->imu = std::make_shared<IMUBmi270>();
+    this->pitchMotor = std::make_shared<Motor>(0, 4 * 11 * 150);
+    this->yawMotor = std::make_shared<Motor>(1, 4 * 11 * 150);
+
+    g_settings.pos_pid.integral_limit = 200;
     pid_struct_init(&this->pitchMotor->positionPID, &g_settings.pos_pid);
     pid_struct_init(&this->pitchMotor->velocityPID, &g_settings.vel_pid);
     pid_struct_init(&this->yawMotor->positionPID, &g_settings.pos_pid);
@@ -40,10 +45,13 @@ void Gimbal::init()
     auto logger = std::make_shared<SensorLogger>();
     // this->imu->registerObserver(logger);
     this->imu->registerObserver(gimbal);
+    this->gps->registerObserver(gimbal);
 
     if (g_settings.mode == MODE_MANUAL) {
         setTarget(g_settings.target_pitch, 0, g_settings.target_yaw);
     }
+    this->pitchMotor->enable(1);
+    this->yawMotor->enable(1);
 }
 
 void Gimbal::update(const imu_data_t &data)
@@ -63,10 +71,34 @@ void Gimbal::update(const imu_data_t &data)
 
     // 只有pitch轴是由imu角度反馈控制的
     float output = pid_calculate(&pitchPID, data.angle.y, pitchTarget, dt);
-    this->pitchMotor->set_postion(output);
-    this->yawMotor->set_postion(yawTarget + g_settings.yaw_offset);
+    this->pitchMotor->set_postion(pitchTarget / 100);
+    // this->yawMotor->set_postion(yawTarget + g_settings.yaw_offset);
     this->pitchMotor->run(dt);
-    this->yawMotor->run(dt);
+    // this->yawMotor->run(dt);
+}
+
+void Gimbal::update(const gps_t &data)
+{
+    gpsData = data;
+    cTime time = {
+        .iYear = data.date.year + 2000,
+        .iMonth = data.date.month,
+        .iDay = data.date.day,
+        .dHours = (double)(data.tim.hour + 8),
+        .dMinutes = (double)data.tim.minute,
+        .dSeconds = (double)data.tim.second,
+    };
+    cLocation location = {
+        .dLongitude = data.longitude,
+        .dLatitude = data.latitude,
+    };
+    cSunCoordinates sunCoordinates = {
+        .dZenithAngle = 0,
+        .dAzimuth = 0,
+    };
+    sunpos(time, location, &sunCoordinates);
+    printf("Zenith Angle: %f\n", sunCoordinates.dZenithAngle);
+    printf("Azimuth: %f\n", sunCoordinates.dAzimuth);
 }
 
 void Gimbal::setTarget(float pitch, float roll, float yaw)

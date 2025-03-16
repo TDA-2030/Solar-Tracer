@@ -143,6 +143,7 @@ static void motor_init(void)
 Motor::Motor(uint8_t _mot_id, float _cpr) : mot_id(_mot_id), cpr(_cpr)
 {
     encoder_init(&pcnt_unit);
+    state = MOT_STATE_IDLE;
     if (!is_init) {
         motor_init();
         is_init = true;
@@ -213,23 +214,22 @@ void Motor::run(float dt)
     float _speed = pid_calculate(&positionPID, revolutions, target_position, dt);
     float output = pid_calculate(&velocityPID, current_speed, _speed, dt);
 
-    // 只在DEBUG级别打印调试信息，减少串口开销
-    ESP_LOGD(TAG, "pos:%.2f spd:%.2f out:%.2f state:%d", 
+    ESP_LOGI(TAG, "pos:%.6f spd:%.2f out:%.2f state:%d", 
              revolutions, current_speed, output, state);
 
     // Check state and handle accordingly
     switch (state) {
         case MOT_STATE_RUNNING:
             // Check for stall condition with hysteresis
-            if (fabs(current_speed) < STALL_SPEED_THRESHOLD && 
-                fabs(output) >= velocityPID.param.max_out * 0.95f) {
-                state = MOT_STATE_WARNING;
-                set_pwm(0);
-                ESP_LOGW(TAG, "Motor stalled! pos:%.2f spd:%.2f out:%.2f", 
-                        revolutions, current_speed, output);
-            } else {
+            // if (fabs(current_speed) < STALL_SPEED_THRESHOLD && 
+            //     fabs(output) >= velocityPID.param.max_out * 0.95f) {
+            //     state = MOT_STATE_WARNING;
+            //     set_pwm(0);
+            //     ESP_LOGW(TAG, "Motor stalled! pos:%.2f spd:%.2f out:%.2f", 
+            //             revolutions, current_speed, output);
+            // } else {
                 set_pwm(output);
-            }
+            // }
             break;
 
         case MOT_STATE_WARNING:

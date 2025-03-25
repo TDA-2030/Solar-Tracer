@@ -27,7 +27,6 @@ class AP_Compass_QMC5883P  {
 public:
 
     AP_Compass_QMC5883P();
-    bool init();
     void read();
 
 private:

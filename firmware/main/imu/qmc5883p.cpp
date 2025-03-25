@@ -71,7 +71,7 @@ static const char *TAG = "qmc5883p";
 #define QMC5883P_STATUS_DATA_READY 0x01
 
 #ifndef DEBUG
-#define DEBUG 0
+#define DEBUG 1
 #endif
 
 
@@ -90,14 +90,11 @@ int AP_Compass_QMC5883P::read_registers(int reg, uint8_t *buffer, int count )
 
 AP_Compass_QMC5883P::AP_Compass_QMC5883P()
 {
-}
 
-bool AP_Compass_QMC5883P::init()
-{
     i2c_bus_handle_t i2c0_bus = bsp_i2c_get_handle();
     if (!i2c0_bus) {
         ESP_LOGE(TAG, "Failed to get i2c bus handle");
-        return false;
+        return ;
     }
 
     i2c_device = i2c_bus_device_create(i2c0_bus, HAL_COMPASS_QMC5883P_I2C_ADDR, 0);
@@ -119,17 +116,17 @@ bool AP_Compass_QMC5883P::init()
         goto fail;
     }
 
-    return true;
 
 fail:
-    return false;
+    return ;
 }
 
 bool AP_Compass_QMC5883P::_check_whoami()
 {
     uint8_t whoami;
-    if (!read_registers(QMC5883P_REG_ID, &whoami, 1) ||
-            whoami != QMC5883P_ID_VAL) {
+    read_registers(QMC5883P_REG_ID, &whoami, 1);
+    if (whoami != QMC5883P_ID_VAL) {
+        printf("whoami:%02x\n", (unsigned)whoami);
         return false;
     }
     return true;
@@ -164,9 +161,7 @@ void AP_Compass_QMC5883P::read()
     auto z = buffer.rz;
 
 #if DEBUG
-    printf("mag.x:%d\n", x);
-    printf("mag.y:%d\n", y);
-    printf("mag.z:%d\n", z);
+    printf("mag:%d, %d, %d\n", x, y, z);
 #endif
 
     // Vector3f field = Vector3f{x * range_scale, y * range_scale, z * range_scale };

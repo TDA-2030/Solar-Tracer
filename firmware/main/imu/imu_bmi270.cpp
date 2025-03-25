@@ -126,7 +126,7 @@ void IMUBmi270::readData()
         _data.gyro.x = lsb_to_dps(sensor_data.gyr.x, (float)2000, bmi2_dev->resolution);
         _data.gyro.y = lsb_to_dps(sensor_data.gyr.y, (float)2000, bmi2_dev->resolution);
         _data.gyro.z = lsb_to_dps(sensor_data.gyr.z, (float)2000, bmi2_dev->resolution);
-        calculateAttitude(&_data, 0.02f);
+        calculateAttitude(&_data, 0.01f);
         notifyObservers(_data);
     } else {
         ESP_LOGW(TAG, "Sensor data not ready");
@@ -137,8 +137,8 @@ void IMUBmi270::readData()
 static void imu_task(void *arg)
 {
     while (1) {
-        globalInstance->readData();
-        vTaskDelay(pdMS_TO_TICKS(20));
+    globalInstance->readData();
+    vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
@@ -161,6 +161,7 @@ IMUBmi270::IMUBmi270()
         ESP_LOGE(TAG, "Failed to create bmi270 sensor");
         return;
     }
+    globalInstance = this;
     bmi270_enable_accel_gyro(bmi_handle);
 
     BaseType_t res;
@@ -168,7 +169,6 @@ IMUBmi270::IMUBmi270()
     if (res != pdPASS) {
         ESP_LOGE(TAG, "Create imu task fail!");
     }
-    globalInstance = this;
 }
 
 IMUBmi270::~IMUBmi270()

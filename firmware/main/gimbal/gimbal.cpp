@@ -30,6 +30,7 @@ void Gimbal::init()
     this->gps = std::make_shared<GPS>();
 
     this->imu = std::make_shared<IMUBmi270>();
+    this->compass = std::make_shared<AP_Compass_QMC5883P>();
     this->pitchMotor = std::make_shared<Motor>(0, 4 * 11 * 150);
     this->yawMotor = std::make_shared<Motor>(1, 4 * 11 * 150);
 
@@ -69,11 +70,17 @@ void Gimbal::update(const imu_data_t &data)
     float dt = (float)(_time - last_time) / 1000000.0f;
     last_time = _time;
 
+    compass->read();
+
+    printf("angle: %f %f %f\n", data.angle.x, data.angle.y, data.angle.z);
+    // printf("gyro: %f %f %f\n", data.gyro.x, data.gyro.y, data.gyro.z);
+    // printf("acc: %f %f %f\n", data.acc.x, data.acc.y, data.acc.z);
+
     // 只有pitch轴是由imu角度反馈控制的
-    float output = pid_calculate(&pitchPID, data.angle.y, pitchTarget, dt);
-    this->pitchMotor->set_postion(pitchTarget / 100);
+    // float output = pid_calculate(&pitchPID, data.angle.y, pitchTarget, dt);
+    // this->pitchMotor->set_postion(pitchTarget / 100);
     // this->yawMotor->set_postion(yawTarget + g_settings.yaw_offset);
-    this->pitchMotor->run(dt);
+    // this->pitchMotor->run(dt);
     // this->yawMotor->run(dt);
 }
 

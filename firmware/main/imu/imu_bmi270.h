@@ -25,9 +25,11 @@ public:
     IMUBmi270();
     ~IMUBmi270();
 
+    int init();
+
     void readData();
 private:
-    bmi270_handle_t bmi_handle = nullptr;
+    bmi270_handle_t bmi_handle;
 
     TaskHandle_t imuTaskHandle;
 

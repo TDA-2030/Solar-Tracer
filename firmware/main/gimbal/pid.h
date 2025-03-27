@@ -24,7 +24,15 @@
 extern "C" {
 #endif
 
-
+static inline void abs_limit(float *a, float ABS_MAX, float ABS_MIN)
+{
+    if (*a > ABS_MAX) {
+        *a = ABS_MAX;
+    }
+    if (*a < ABS_MIN) {
+        *a = ABS_MIN;
+    }
+}
 
 struct pid_param {
     float p;
@@ -38,7 +46,7 @@ struct pid_param {
 };
 
 struct pid {
-    struct pid_param param;
+    struct pid_param *param;
 
     uint8_t enable;
 

@@ -124,11 +124,22 @@ static void cjson_add_num_as_str(cJSON *obj, const char *name, double number)
             p:0.1,
             i:0.1,
             d:0.1,
+            maxout:200,
+            maxitg:200,
         },
         vel:{
             p:0.1,
             i:0.1,
             d:0.1,
+            maxout:200,
+            maxitg:200,
+        },
+        pitch:{
+            p:0.1,
+            i:0.1,
+            d:0.1,
+            maxout:200,
+            maxitg:200,
         },
     },
     mode:"auto",
@@ -178,19 +189,27 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
     if (pid) {
         cJSON *pos = cJSON_GetObjectItem(pid, "pos");
         cJSON *vel = cJSON_GetObjectItem(pid, "vel");
+        cJSON *pitch = cJSON_GetObjectItem(pid, "pitch");
         if (pos) {
             g_settings.pos_pid.p = cJSON_GetObjectItem(pos, "p")->valuedouble * FACTOR;
             g_settings.pos_pid.i = cJSON_GetObjectItem(pos, "i")->valuedouble * FACTOR;
             g_settings.pos_pid.d = cJSON_GetObjectItem(pos, "d")->valuedouble * FACTOR;
-            gimbal.pitchMotor->positionPID.param = g_settings.pos_pid;
-            gimbal.yawMotor->positionPID.param = g_settings.pos_pid;
+            g_settings.pos_pid.max_out = cJSON_GetObjectItem(pos, "maxout")->valuedouble;
+            g_settings.pos_pid.integral_limit = cJSON_GetObjectItem(pos, "maxitg")->valuedouble;
         }
         if (vel) {
             g_settings.vel_pid.p = cJSON_GetObjectItem(vel, "p")->valuedouble * FACTOR;
             g_settings.vel_pid.i = cJSON_GetObjectItem(vel, "i")->valuedouble * FACTOR;
             g_settings.vel_pid.d = cJSON_GetObjectItem(vel, "d")->valuedouble * FACTOR;
-            gimbal.pitchMotor->velocityPID.param = g_settings.vel_pid;
-            gimbal.yawMotor->velocityPID.param = g_settings.vel_pid;
+            g_settings.vel_pid.max_out = cJSON_GetObjectItem(vel, "maxout")->valuedouble;
+            g_settings.vel_pid.integral_limit = cJSON_GetObjectItem(vel, "maxitg")->valuedouble;
+        }
+        if (pitch) {
+            g_settings.pitch_pid.p = cJSON_GetObjectItem(pitch, "p")->valuedouble * FACTOR;
+            g_settings.pitch_pid.i = cJSON_GetObjectItem(pitch, "i")->valuedouble * FACTOR;
+            g_settings.pitch_pid.d = cJSON_GetObjectItem(pitch, "d")->valuedouble * FACTOR;
+            g_settings.pitch_pid.max_out = cJSON_GetObjectItem(pitch, "maxout")->valuedouble;
+            g_settings.pitch_pid.integral_limit = cJSON_GetObjectItem(pitch, "maxitg")->valuedouble;
         }
     }
 
@@ -203,6 +222,13 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
             g_settings.mode = MODE_AUTO;
         }
     }
+
+    // 解析 yaw_offset
+    cJSON *yaw_offset = cJSON_GetObjectItem(root, "yaw_offset");
+    if (yaw_offset) {
+        g_settings.yaw_offset = yaw_offset->valuedouble;
+    }
+
 
     // 解析 th
     cJSON *th = cJSON_GetObjectItem(root, "th");
@@ -239,24 +265,39 @@ static esp_err_t setting_get_handler(httpd_req_t *req)
     cJSON *pid = cJSON_CreateObject();
     cJSON *pos = cJSON_CreateObject();
     cJSON *vel = cJSON_CreateObject();
+    cJSON *pitch = cJSON_CreateObject();
 
     // 添加 pos 参数
     cjson_add_num_as_str(pos, "p", g_settings.pos_pid.p / FACTOR);
     cjson_add_num_as_str(pos, "i", g_settings.pos_pid.i / FACTOR);
     cjson_add_num_as_str(pos, "d", g_settings.pos_pid.d / FACTOR);
+    cjson_add_num_as_str(pos, "maxout", g_settings.pos_pid.max_out);
+    cjson_add_num_as_str(pos, "maxitg", g_settings.pos_pid.integral_limit);
 
     // 添加 vel 参数
     cjson_add_num_as_str(vel, "p", g_settings.vel_pid.p / FACTOR);
     cjson_add_num_as_str(vel, "i", g_settings.vel_pid.i / FACTOR);
     cjson_add_num_as_str(vel, "d", g_settings.vel_pid.d / FACTOR);
+    cjson_add_num_as_str(vel, "maxout", g_settings.vel_pid.max_out);
+    cjson_add_num_as_str(vel, "maxitg", g_settings.vel_pid.integral_limit);
+
+    // 添加 pitch 参数
+    cjson_add_num_as_str(pitch, "p", g_settings.pitch_pid.p / FACTOR);
+    cjson_add_num_as_str(pitch, "i", g_settings.pitch_pid.i / FACTOR);
+    cjson_add_num_as_str(pitch, "d", g_settings.pitch_pid.d / FACTOR);
+    cjson_add_num_as_str(pitch, "maxout", g_settings.pitch_pid.max_out);
+    cjson_add_num_as_str(pitch, "maxitg", g_settings.pitch_pid.integral_limit);
 
     // 组装 pid
     cJSON_AddItemToObject(pid, "pos", pos);
     cJSON_AddItemToObject(pid, "vel", vel);
+    cJSON_AddItemToObject(pid, "pitch", pitch);
     cJSON_AddItemToObject(root, "pid", pid);
 
     // 添加 mode
     cJSON_AddStringToObject(root, "mode", g_settings.mode == MODE_MANUAL ? "manual" : "auto");
+
+    cjson_add_num_as_str(root, "yaw_offset", g_settings.yaw_offset);
 
     // 创建 th 对象
     cJSON *th = cJSON_CreateObject();

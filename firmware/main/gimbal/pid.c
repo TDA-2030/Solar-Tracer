@@ -17,16 +17,6 @@
 #include <math.h>
 #include "pid.h"
 
-static inline void abs_limit(float *a, float ABS_MAX, float ABS_MIN)
-{
-    if (*a > ABS_MAX) {
-        *a = ABS_MAX;
-    }
-    if (*a < ABS_MIN) {
-        *a = ABS_MIN;
-    }
-}
-
 /**
   * @brief     calculate delta PID and position PID
   * @param[in] pid: control pid struct
@@ -39,21 +29,21 @@ float pid_calculate(struct pid *pid, float get, float set, float dt)
     pid->get = get;
     pid->set = set;
     pid->err = set - get;
-    if ((pid->param.input_max_err != 0) && (fabs(pid->err) > pid->param.input_max_err)) {
+    if ((pid->param->input_max_err != 0) && (fabs(pid->err) > pid->param->input_max_err)) {
         return 0;
     }
 
-    pid->pout = pid->param.p * pid->err;
-    pid->iout += pid->param.i * pid->err * dt;
-    pid->dout = pid->param.d * (pid->err - pid->last_err) / dt;
+    pid->pout = pid->param->p * pid->err;
+    pid->iout += pid->param->i * pid->err * dt;
+    pid->dout = pid->param->d * (pid->err - pid->last_err) / dt;
 
     pid->out = pid->pout + pid->iout + pid->dout;
     float u_unlimited = pid->out;
-    abs_limit(&(pid->iout), pid->param.integral_limit, -pid->param.integral_limit);
-    abs_limit(&(pid->out), pid->param.max_out, -pid->param.max_out);
+    abs_limit(&(pid->iout), pid->param->integral_limit, -pid->param->integral_limit);
+    abs_limit(&(pid->out), pid->param->max_out, -pid->param->max_out);
     // 反向计算修正积分项
-    pid->e_back = (pid->out - u_unlimited) * pid->param.Kc;
-    pid->iout += ( pid->e_back) * dt;  // 修正积分累积
+    // pid->e_back = (pid->out - u_unlimited) * pid->param.Kc;
+    // pid->iout += ( pid->e_back) * dt;  // 修正积分累积
 
     if (pid->enable == 0) {
         pid->out = 0;
@@ -70,7 +60,7 @@ void pid_struct_init(struct pid *pid, const struct pid_param *_param)
 {
     pid->enable = 1;
 
-    pid->param = *_param;
+    pid->param = _param;
     pid->err = 0;
     pid->last_err = 0;
     

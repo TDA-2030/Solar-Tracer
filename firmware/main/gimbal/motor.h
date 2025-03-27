@@ -14,7 +14,7 @@ typedef enum {
     MOT_STATE_IDLE = 0,
     MOT_STATE_RUNNING,
     MOT_STATE_WARNING,
-}mot_state_t;
+} mot_state_t;
 
 class Motor {
 public:
@@ -26,21 +26,36 @@ public:
 
     void run(float dt); // 运行电机，周期调用
     void enable(bool is_enable);
-    void get_postion(float *revolutions); // 获取电机当前位置(圈数)
+    void get_position(float *revolutions); // 获取电机当前位置(圈数)
     void get_velocity(float *velocity);  // 获取电机当前速度(圈/秒)
-    void set_postion(float position);
+    void set_position(float position);
+    void set_max_speed(float max_speed)
+    {
+        this->max_speed = max_speed;
+    }
+    float get_max_speed()
+    {
+        return this->max_speed;
+    }
+    mot_state_t get_state()
+    {
+        return this->state;
+    }
+    void clear_position();
 
     struct pid positionPID;
     struct pid velocityPID;
-    mot_state_t state; // 电机状态
 private:
-    uint8_t mot_id;
     pcnt_unit_handle_t pcnt_unit;
+    uint8_t mot_id;
     float cpr; // 电机编码器分辨率
     float last_revolutions = 0;
     float current_speed;
     float target_speed;
     float target_position;
+    uint32_t stall_cnt = 0;
+    mot_state_t state; // 电机状态
+    float max_speed; // 最大速度
 
     void set_pwm(int32_t percent);
 

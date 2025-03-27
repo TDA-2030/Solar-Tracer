@@ -136,19 +136,20 @@ void IMUBmi270::readData()
 
 static void imu_task(void *arg)
 {
+    vTaskDelay(pdMS_TO_TICKS(500));
     while (1) {
-    globalInstance->readData();
-    vTaskDelay(pdMS_TO_TICKS(10));
+        globalInstance->readData();
+        vTaskDelay(pdMS_TO_TICKS(10));
     }
 }
 
-IMUBmi270::IMUBmi270()
+int IMUBmi270::init()
 {
 
     i2c_bus_handle_t i2c_bus_handle = bsp_i2c_get_handle();
     if (!i2c_bus_handle) {
         ESP_LOGE(TAG, "Failed to get i2c bus handle");
-        return;
+        return -1;
     }
 
     bmi270_i2c_config_t i2c_bmi270_conf = {
@@ -159,7 +160,7 @@ IMUBmi270::IMUBmi270()
     esp_err_t ret = bmi270_sensor_create(&i2c_bmi270_conf, &bmi_handle);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "Failed to create bmi270 sensor");
-        return;
+        return -1;
     }
     globalInstance = this;
     bmi270_enable_accel_gyro(bmi_handle);
@@ -168,7 +169,14 @@ IMUBmi270::IMUBmi270()
     res = xTaskCreate(imu_task, "imu_task", 4096, NULL, configMAX_PRIORITIES - 1, &imuTaskHandle);
     if (res != pdPASS) {
         ESP_LOGE(TAG, "Create imu task fail!");
+        return -1;
     }
+    return 0;
+}
+
+IMUBmi270::IMUBmi270(): bmi_handle(nullptr)
+{
+
 }
 
 IMUBmi270::~IMUBmi270()

@@ -28,7 +28,8 @@ extern "C" void app_main()
     ESP_ERROR_CHECK( err );
 
     g_settings.load();
-    // adc_init();
+    adc_init();
+    vTaskDelay(pdMS_TO_TICKS(100));
     bsp_i2c_init();
 
     /** Determine whether to restore the settings by reading the restart count */
@@ -37,8 +38,7 @@ extern "C" void app_main()
     if (restart_cnt >= RESTART_COUNT_RESET) {
         ESP_LOGW(TAG, "Erase information saved in flash and restart");
     }
+    start_web();
 
     gimbal.init();
-
-    start_web();
 }

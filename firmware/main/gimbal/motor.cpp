@@ -37,7 +37,7 @@ static const char *TAG = "motor";
 // 添加静态成员定义
 bool Motor::is_init = false;
 
-static void encoder_init(pcnt_unit_handle_t *pcnt_unit)
+static void encoder_init(pcnt_unit_handle_t *pcnt_unit, int gpio_enca, int gpio_encb)
 {
     ESP_LOGI(TAG, "install pcnt unit");
     pcnt_unit_config_t unit_config = {
@@ -57,14 +57,14 @@ static void encoder_init(pcnt_unit_handle_t *pcnt_unit)
 
     ESP_LOGI(TAG, "install pcnt channels");
     pcnt_chan_config_t chan_a_config = {
-        .edge_gpio_num = BOARD_IO_MOTX_ENC_A,
-        .level_gpio_num = BOARD_IO_MOTX_ENC_B,
+        .edge_gpio_num = gpio_enca,
+        .level_gpio_num = gpio_encb,
     };
     pcnt_channel_handle_t pcnt_chan_a = NULL;
     ESP_ERROR_CHECK(pcnt_new_channel(*pcnt_unit, &chan_a_config, &pcnt_chan_a));
     pcnt_chan_config_t chan_b_config = {
-        .edge_gpio_num = BOARD_IO_MOTX_ENC_B,
-        .level_gpio_num = BOARD_IO_MOTX_ENC_A,
+        .edge_gpio_num = gpio_encb,
+        .level_gpio_num = gpio_enca,
     };
     pcnt_channel_handle_t pcnt_chan_b = NULL;
     ESP_ERROR_CHECK(pcnt_new_channel(*pcnt_unit, &chan_b_config, &pcnt_chan_b));
@@ -142,12 +142,19 @@ static void motor_init(void)
 
 Motor::Motor(uint8_t _mot_id, float _cpr) : mot_id(_mot_id), cpr(_cpr)
 {
-    encoder_init(&pcnt_unit);
+    if (0 == _mot_id) {
+        encoder_init(&pcnt_unit, BOARD_IO_MOTX_ENC_A, BOARD_IO_MOTX_ENC_B);
+    } else {
+        encoder_init(&pcnt_unit, BOARD_IO_MOTY_ENC_A, BOARD_IO_MOTY_ENC_B);
+    }
+
     state = MOT_STATE_IDLE;
     if (!is_init) {
         motor_init();
         is_init = true;
     }
+    max_speed = 100;
+    stall_cnt = 0;
 }
 
 /**
@@ -172,11 +179,16 @@ void Motor::set_pwm(int32_t percent)
     ESP_ERROR_CHECK(ledc_update_duty(LEDC_MODE, (ledc_channel_t)(channel + 1)));
 }
 
-void Motor::get_postion(float *revolutions)
+void Motor::get_position(float *revolutions)
 {
     int pulse_count;
     pcnt_unit_get_count(pcnt_unit, &pulse_count);
     *revolutions = (float)pulse_count / cpr;
+}
+
+void Motor::clear_position()
+{
+    pcnt_unit_clear_count(pcnt_unit);
 }
 
 void Motor::get_velocity(float *velocity)
@@ -201,7 +213,7 @@ void Motor::run(float dt)
     }
 
     float revolutions;
-    get_postion(&revolutions);
+    get_position(&revolutions);
     current_speed = (revolutions - last_revolutions) / dt;
     last_revolutions = revolutions;
 
@@ -212,42 +224,51 @@ void Motor::run(float dt)
 
     // Always calculate PID even in WARNING state
     float _speed = pid_calculate(&positionPID, revolutions, target_position, dt);
+    abs_limit(&_speed, max_speed, -max_speed);
     float output = pid_calculate(&velocityPID, current_speed, _speed, dt);
 
-    ESP_LOGI(TAG, "pos:%.6f spd:%.2f out:%.2f state:%d", 
-             revolutions, current_speed, output, state);
+    // if(mot_id == 1)
+    // printf("pos:%.3f,%.3f,%.2f,%.2f,%.2f,%d\n", revolutions, target_position, current_speed, output, max_speed, state);
+    // ESP_LOGI(TAG, "id:%d, pos:%.3f, tar:%.3f spd:%.2f out:%.2f state:%d",
+            //  revolutions, target_position, current_speed, output, state);
 
     // Check state and handle accordingly
     switch (state) {
-        case MOT_STATE_RUNNING:
-            // Check for stall condition with hysteresis
-            // if (fabs(current_speed) < STALL_SPEED_THRESHOLD && 
-            //     fabs(output) >= velocityPID.param.max_out * 0.95f) {
-            //     state = MOT_STATE_WARNING;
-            //     set_pwm(0);
-            //     ESP_LOGW(TAG, "Motor stalled! pos:%.2f spd:%.2f out:%.2f", 
-            //             revolutions, current_speed, output);
-            // } else {
+    case MOT_STATE_RUNNING:
+        // Check for stall condition with hysteresis
+        if (fabs(current_speed) < STALL_SPEED_THRESHOLD &&
+                fabs(output) >= velocityPID.param->max_out * 0.95f) {
+            if ((++ stall_cnt) > 10) {
+                stall_cnt = 0;
+                state = MOT_STATE_WARNING;
+                set_pwm(0);
+                ESP_LOGW(TAG, "Motor%d stalled! pos:%.2f spd:%.2f out:%.2f",
+                         mot_id, revolutions, current_speed, output);
+            } else {
                 set_pwm(output);
-            // }
-            break;
-
-        case MOT_STATE_WARNING:
-            // Add hysteresis for recovery to prevent oscillation
-            if (fabs(output) < velocityPID.param.max_out * RECOVERY_OUTPUT_RATIO) {
-                state = MOT_STATE_RUNNING;
-                set_pwm(output);
-                ESP_LOGI(TAG, "Motor recovered from stall");
             }
-            break;
+        } else {
+            stall_cnt = 0;
+            set_pwm(output);
+        }
+        break;
 
-        default:
-            set_pwm(0);
-            break;
+    case MOT_STATE_WARNING:
+        // Add hysteresis for recovery to prevent oscillation
+        if (fabs(output) < velocityPID.param->max_out * RECOVERY_OUTPUT_RATIO) {
+            state = MOT_STATE_RUNNING;
+            set_pwm(output);
+            ESP_LOGI(TAG, "Motor recovered from stall");
+        }
+        break;
+
+    default:
+        set_pwm(0);
+        break;
     }
 }
 
-void Motor::set_postion(float position)
+void Motor::set_position(float position)
 {
     this->target_position = position;
 }

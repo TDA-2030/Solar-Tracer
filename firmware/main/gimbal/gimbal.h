@@ -35,6 +35,7 @@ public:
     ~Gimbal();
     void init();
     void setTarget(float pitch, float roll, float yaw);
+    void check_home(float homing_speed);
 
     void update(const gps_t &data) override;
     void update(const imu_data_t &data) override;
@@ -47,7 +48,7 @@ public:
     gps_t gpsData;
 
 private:
-
+    float gearRatio;
     float pitchTarget;
     float yawTarget;
 };

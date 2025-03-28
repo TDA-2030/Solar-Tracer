@@ -29,6 +29,10 @@ extern "C" {
 #define BOARD_IO_IMU_SDA 38
 #define BOARD_IO_IMU_SCL 37
 
+#define BOARD_IO_LED_RED 42
+#define BOARD_IO_LED_GREEN 41
+
+
 esp_err_t bsp_i2c_init(void);
 i2c_bus_handle_t bsp_i2c_get_handle(void);
 

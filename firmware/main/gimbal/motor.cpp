@@ -17,6 +17,7 @@
 #include "board.h"
 #include "motor.h"
 #include "pid.h"
+#include "led.h"
 
 static const char *TAG = "motor";
 
@@ -241,6 +242,7 @@ void Motor::run(float dt)
             if ((++ stall_cnt) > 10) {
                 stall_cnt = 0;
                 state = MOT_STATE_WARNING;
+                led_start_state(LED_RED, BLINK_DOUBLE);
                 set_pwm(0);
                 ESP_LOGW(TAG, "Motor%d stalled! pos:%.2f spd:%.2f out:%.2f",
                          mot_id, revolutions, current_speed, output);
@@ -257,6 +259,7 @@ void Motor::run(float dt)
         // Add hysteresis for recovery to prevent oscillation
         if (fabs(output) < velocityPID.param->max_out * RECOVERY_OUTPUT_RATIO) {
             state = MOT_STATE_RUNNING;
+            led_stop_state(LED_RED, BLINK_DOUBLE);
             set_pwm(output);
             ESP_LOGI(TAG, "Motor recovered from stall");
         }

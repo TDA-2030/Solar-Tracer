@@ -155,3 +155,16 @@ int restart_count_get()
     return restart_count;
 }
 
+void set_time(int year, int month, int day, int hour, int min, int sec)
+{
+    struct tm t = {0};        // Initalize to all 0's
+    t.tm_year = year - 1900;    // This is year-1900, so 121 = 2021
+    t.tm_mon = month - 1;
+    t.tm_mday = day;
+    t.tm_hour = hour;
+    t.tm_min = min;
+    t.tm_sec = sec;
+    time_t timeSinceEpoch = mktime(&t);
+    struct timeval now = { .tv_sec = timeSinceEpoch };
+    settimeofday(&now, NULL);
+}

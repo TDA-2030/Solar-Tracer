@@ -11,6 +11,7 @@
 #include "setting.h"
 #include "adc.h"
 #include "web.h"
+#include "led.h"
 
 static const char *TAG = "app_main";
 
@@ -27,6 +28,7 @@ extern "C" void app_main()
     }
     ESP_ERROR_CHECK( err );
 
+    led_init();
     g_settings.load();
     adc_init();
     vTaskDelay(pdMS_TO_TICKS(100));

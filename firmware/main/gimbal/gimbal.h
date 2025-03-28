@@ -48,6 +48,7 @@ public:
     gps_t gpsData;
 
 private:
+    static void update_task(void *pvParameters);
     float gearRatio;
     float pitchTarget;
     float yawTarget;

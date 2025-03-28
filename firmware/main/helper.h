@@ -20,6 +20,8 @@ esp_err_t iot_param_erase(const char* space_name, const char* key);
 
 int restart_count_get();
 
+void set_time(int year, int month, int day, int hour, int min, int sec);
+
 #ifdef __cplusplus
 }
 #endif

@@ -3,6 +3,10 @@
 #include "sun_pos.h"
 #include <math.h>
 
+#ifdef __linux__
+#include <cstdio>
+#endif
+
 void sunpos(cTime udtTime,cLocation udtLocation, cSunCoordinates *udtSunCoordinates)
 {
 	// Main variables
@@ -34,6 +38,8 @@ void sunpos(cTime udtTime,cLocation udtLocation, cSunCoordinates *udtSunCoordina
 		dJulianDate=(double)(liAux2)-0.5+dDecimalHours/24.0;
 		// Calculate difference between current Julian Day and JD 2451545.0 
 		dElapsedJulianDays = dJulianDate-2451545.0;
+		// printf("Julian Days: %f\n", dJulianDate);
+
 	}
 
 	// Calculate ecliptic coordinates (ecliptic longitude and obliquity of the 
@@ -99,5 +105,38 @@ void sunpos(cTime udtTime,cLocation udtLocation, cSunCoordinates *udtSunCoordina
 			*sin(udtSunCoordinates->dZenithAngle);
 		udtSunCoordinates->dZenithAngle=(udtSunCoordinates->dZenithAngle 
 			+ dParallax)/rad;
+		udtSunCoordinates->dElevation = 90-udtSunCoordinates->dZenithAngle;
 	}
 }
+
+// run test on linux
+#ifdef __linux__
+
+
+int main(int argc, char **argv)
+{
+	if (argc != 6)
+	{
+		printf("Usage: sun_pos <year> <month> <day> <hour> <minute>\n");
+		return 1;
+	}
+
+	struct cTime time;
+	time.iYear = atoi(argv[1]);
+	time.iMonth = atoi(argv[2]);
+	time.iDay = atoi(argv[3]);
+	time.dHours = atoi(argv[4]);
+	time.dMinutes = atoi(argv[5]);
+	time.dSeconds = 0;
+
+	struct cLocation location;
+	location.dLongitude = 112.933333;//data.longitude,
+    location.dLatitude = 28.183333;//data.latitude,
+
+	struct cSunCoordinates sunCoordinates;
+	sunpos(time, location, &sunCoordinates);
+	printf("%f\t%f\t%f\n", sunCoordinates.dAzimuth, sunCoordinates.dZenithAngle, sunCoordinates.dElevation);
+	return 0;
+}
+
+#endif

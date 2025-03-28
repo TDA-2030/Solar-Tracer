@@ -29,6 +29,7 @@ struct cLocation
 
 struct cSunCoordinates
 {
+	double dElevation; // In degrees
 	double dZenithAngle;
 	double dAzimuth;
 };

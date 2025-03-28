@@ -116,6 +116,21 @@ static void cjson_add_num_as_str(cJSON *obj, const char *name, double number)
     cJSON_AddStringToObject(obj, name, buffer);
 }
 
+static double cjson_get_num(cJSON *obj, const char *name)
+{
+    cJSON *item = cJSON_GetObjectItem(obj, name);
+    if (!item) {
+        ESP_LOGE(REST_TAG, "Error: %s not found in JSON", name);
+        return 0.0;
+    }
+
+    if (!cJSON_IsNumber(item)) {
+        ESP_LOGE(REST_TAG, "Error: %s is not a number", name);
+        return 0.0;
+    }
+    return item->valuedouble;
+}
+
 /* json format of setting */
 /*
 {
@@ -251,6 +266,62 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
     cJSON_Delete(root);
     httpd_resp_sendstr(req, "Post control value successfully");
     g_settings.save();
+    return ESP_OK;
+}
+
+void setTime(int sc, int mn, int hr, int dy, int mt, int yr) 
+{
+    // seconds, minute, hour, day, month, year $ microseconds(optional)
+    // ie setTime(20, 34, 8, 1, 4, 2021) = 8:34:20 1/4/2021
+    
+
+}
+
+static esp_err_t location_post_handler(httpd_req_t *req)
+{
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int received = 0;
+    if (total_len >= SCRATCH_BUFSIZE) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+        return ESP_FAIL;
+    }
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len);
+        if (received <= 0) {
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
+
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        printf("Error parsing JSON!\n");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error parsing JSON!");
+        return ESP_FAIL;
+    }
+    printf("Received JSON: %s\n", buf);
+    // 解析 location
+    gimbal.gpsData.latitude = cjson_get_num(root, "latitude");
+    gimbal.gpsData.longitude = cjson_get_num(root, "longitude");
+    cJSON *time = cJSON_GetObjectItem(root, "time");
+    if (time) {
+        gimbal.gpsData.date.year = cjson_get_num(time, "year") - 2000;
+        gimbal.gpsData.date.month = cjson_get_num(time, "month");
+        gimbal.gpsData.date.day = cjson_get_num(time, "day");
+        gimbal.gpsData.tim.hour = cjson_get_num(time, "hours");
+        gimbal.gpsData.tim.minute = cjson_get_num(time, "minutes");
+        gimbal.gpsData.tim.second = cjson_get_num(time, "seconds");
+        gimbal.update(gimbal.gpsData);
+    }
+
+    cJSON_Delete(root);
+    httpd_resp_sendstr(req, "Post control value successfully");
     return ESP_OK;
 }
 
@@ -421,6 +492,7 @@ esp_err_t WebServer::start()
     on("/api/v1/sysinfo", HTTP_GET, system_info_get_handler, rest_context);
     on("/api/v1/setting", HTTP_GET, setting_get_handler, rest_context);
     on("/api/v1/setting", HTTP_POST, setting_post_handler, rest_context);
+    on("/api/v1/location", HTTP_POST, location_post_handler, rest_context);
     on("/api/v1/temp/raw", HTTP_GET, imu_data_get_handler, rest_context);
     on("/*", HTTP_GET, rest_common_get_handler, rest_context);
 

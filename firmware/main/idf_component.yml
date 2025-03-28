@@ -5,3 +5,4 @@ dependencies:
   idf:
     version: '>=5.0'
   espressif2022/bmi270: ^1.1.0
+  espressif/led_indicator: ^1.1.1

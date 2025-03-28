@@ -39,6 +39,7 @@ public:
 
     void update(const gps_t &data) override;
     void update(const imu_data_t &data) override;
+    void search_azimuth(float *max_azimuth, float *min_azimuth);
     std::shared_ptr<IMUBmi270> imu;
     std::shared_ptr<AP_Compass_QMC5883P> compass;
     std::shared_ptr<GPS> gps;

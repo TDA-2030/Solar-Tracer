@@ -107,6 +107,12 @@ void Gimbal::init()
     this->pitchMotor->set_max_speed(100);
     this->yawMotor->set_max_speed(100);
 
+    gpsData.longitude = 112.933333;
+    gpsData.latitude = 28.183333;
+    set_time(2025, 3, 28, 10, 0, 0);
+    float max_azimuth, min_azimuth;
+    search_azimuth(&max_azimuth, &min_azimuth);
+
     led_start_state(LED_GREEN, BLINK_FAST);
     check_home(70);
     led_stop_state(LED_GREEN, BLINK_FAST);
@@ -154,13 +160,13 @@ void Gimbal::update(const gps_t &data)
     gpsData = data;
     static int count = 0;
     if (count++ % 10 == 0) {
-        ESP_LOGI(TAG, "Gimbal updating gps %d/%d/%d %d:%d:%d "
-                 "latitude   = %.05f° "
+        ESP_LOGI(TAG, "Gimbal updating gps, UTC Time:%d/%d/%d %d:%d:%d "
+                 "latitude = %.05f° "
                  "longitude = %.05f° "
-                 "altitude   = %.02fm "
-                 "speed      = %fm/s",
+                 "altitude = %.02fm "
+                 "speed = %fm/s",
                  gpsData.date.year + 2000, gpsData.date.month, gpsData.date.day,
-                 gpsData.tim.hour + 8, gpsData.tim.minute, gpsData.tim.second,
+                 gpsData.tim.hour, gpsData.tim.minute, gpsData.tim.second,
                  gpsData.latitude, gpsData.longitude, gpsData.altitude, gpsData.speed);
         set_time(data.date.year + 2000, data.date.month, data.date.day, data.tim.hour, data.tim.minute, data.tim.second);
     }
@@ -173,7 +179,7 @@ void Gimbal::update_task(void *pvParameters)
         time_t now;
         struct tm timeinfo;
         time(&now);
-        localtime_r(&now, &timeinfo);
+        gmtime_r(&now, &timeinfo);
 
         cTime time = {
             .iYear = timeinfo.tm_year + 1900,
@@ -189,7 +195,7 @@ void Gimbal::update_task(void *pvParameters)
         };
         cSunCoordinates sunCoordinates;
         sunpos(time, location, &sunCoordinates);
-        ESP_LOGI(TAG, "UTC Time:%d %d %d %d:%d:%d  Elevation:%f°, Azimuth:%f°, Zenith:%f°", time.iYear, time.iMonth, time.iDay, (int)time.dHours, (int)time.dMinutes, (int)time.dSeconds,
+        ESP_LOGI(TAG, "UTC Time:%d-%d-%d %d:%d:%d  Elevation:%f°, Azimuth:%f°, Zenith:%f°", time.iYear, time.iMonth, time.iDay, (int)time.dHours, (int)time.dMinutes, (int)time.dSeconds,
                  sunCoordinates.dElevation, sunCoordinates.dAzimuth, sunCoordinates.dZenithAngle);
         if (g_settings.mode == MODE_AUTO) {
             if (sunCoordinates.dElevation > 0) {
@@ -211,4 +217,63 @@ void Gimbal::setTarget(float pitch, float roll, float yaw)
     this->yawMotor->set_position((yawTarget + g_settings.yaw_offset) * gearRatio / 360);
 }
 
+void Gimbal::search_azimuth(float *max_azimuth, float *min_azimuth)
+{
+    *max_azimuth = 0;
+    *min_azimuth = 360;
+    // search maximum and minimum azimuth in a day
+    time_t now;
+    struct tm local_time;
+    time(&now);
+    localtime_r(&now, &local_time);
+    printf("Searching for Local Time: %d-%02d-%02d %02d:%02d:%02d\n", local_time.tm_year + 1900, local_time.tm_mon + 1, local_time.tm_mday, local_time.tm_hour, local_time.tm_min, local_time.tm_sec);
 
+    local_time.tm_hour = 6;
+    local_time.tm_min = 0;
+    local_time.tm_sec = 0;
+	time_t start_time = mktime(&local_time);
+
+    // 假设的 GPS 数据
+    cLocation location = {
+        .dLongitude = gpsData.longitude,
+        .dLatitude = gpsData.latitude,
+    };
+
+    // 模拟从6点到18点每隔30分钟计算一次
+    for (int i = 0; i < 25; i++) { // 从6点到18点有25个
+        // 转换为UTC时间
+        struct tm utcTime;
+		gmtime_r(&start_time, &utcTime);
+
+        // 转换为cTime结构体
+        cTime utcTimeStruct = {
+            .iYear = utcTime.tm_year + 1900,
+            .iMonth = utcTime.tm_mon + 1,
+            .iDay = utcTime.tm_mday,
+            .dHours = (double)utcTime.tm_hour,
+            .dMinutes = (double)utcTime.tm_min,
+            .dSeconds = (double)utcTime.tm_sec
+        };
+
+        cSunCoordinates sunCoordinates;
+        sunpos(utcTimeStruct, location, &sunCoordinates);
+
+        // 更新Azimuth的最大值和最小值
+        if (sunCoordinates.dAzimuth > *max_azimuth) {
+            *max_azimuth = sunCoordinates.dAzimuth;
+        }
+        if (sunCoordinates.dAzimuth < *min_azimuth) {
+            *min_azimuth = sunCoordinates.dAzimuth;
+        }
+
+        // 打印结果
+        printf("UTC Time: %d-%02d-%02d %02d:%02d:%02d  Elevation: %.2f°, Azimuth: %.2f°, Zenith: %.2f°\n",
+               utcTimeStruct.iYear, utcTimeStruct.iMonth, utcTimeStruct.iDay, (int)utcTimeStruct.dHours, (int)utcTimeStruct.dMinutes, (int)utcTimeStruct.dSeconds,
+               sunCoordinates.dElevation, sunCoordinates.dAzimuth, sunCoordinates.dZenithAngle);
+
+        // 更新时间为下一个30分钟
+        start_time += 30 * 60;
+    }
+
+    printf("Azimuth maximum: %.2f°, minimum: %.2f°\n", *max_azimuth, *min_azimuth);
+}

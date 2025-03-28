@@ -112,6 +112,69 @@ void sunpos(cTime udtTime,cLocation udtLocation, cSunCoordinates *udtSunCoordina
 // run test on linux
 #ifdef __linux__
 
+#include <time.h>
+
+void search_azimuth(float *max_azimuth, float *min_azimuth)
+{
+    *max_azimuth = 0;
+    *min_azimuth = 360;
+    // search maximum and minimum azimuth in a day
+    time_t now;
+    struct tm local_time;
+    time(&now);
+    localtime_r(&now, &local_time);
+
+    local_time.tm_hour = 6;
+    local_time.tm_min = 0;
+    local_time.tm_sec = 0;
+	time_t start_time = mktime(&local_time);
+
+    // 假设的 GPS 数据
+    struct cLocation location;
+	location.dLongitude = 112.933333;
+    location.dLatitude = 28.183333;
+
+    // 模拟从北京时间6点到18点每隔30分钟计算一次
+    for (int i = 0; i < 25; i++) { // 从6点到18点有25个
+        // 转换为UTC时间
+        struct tm utcTime;
+		gmtime_r(&start_time, &utcTime);
+
+        // 转换为cTime结构体
+        cTime utcTimeStruct = {
+            .iYear = utcTime.tm_year + 1900,
+            .iMonth = utcTime.tm_mon + 1,
+            .iDay = utcTime.tm_mday,
+            .dHours = utcTime.tm_hour,
+            .dMinutes = utcTime.tm_min,
+            .dSeconds = utcTime.tm_sec
+        };
+
+        cSunCoordinates sunCoordinates;
+        sunpos(utcTimeStruct, location, &sunCoordinates);
+
+        // 更新Azimuth的最大值和最小值
+        if (sunCoordinates.dAzimuth > *max_azimuth) {
+            *max_azimuth = sunCoordinates.dAzimuth;
+        }
+        if (sunCoordinates.dAzimuth < *min_azimuth) {
+            *min_azimuth = sunCoordinates.dAzimuth;
+        }
+
+        // 打印结果
+        printf("UTC Time: %d-%02d-%02d %02d:%02d:%02d  Elevation: %.2f°, Azimuth: %.2f°, Zenith: %.2f°\n",
+               utcTimeStruct.iYear, utcTimeStruct.iMonth, utcTimeStruct.iDay, (int)utcTimeStruct.dHours, (int)utcTimeStruct.dMinutes, (int)utcTimeStruct.dSeconds,
+               sunCoordinates.dElevation, sunCoordinates.dAzimuth, sunCoordinates.dZenithAngle);
+
+        // 更新时间为下一个30分钟
+        start_time += 30 * 60;
+    }
+
+    // 打印Azimuth的最大值和最小值
+    printf("Maximum Azimuth: %.2f°\n", *max_azimuth);
+    printf("Minimum Azimuth: %.2f°\n", *min_azimuth);
+}
+
 
 int main(int argc, char **argv)
 {
@@ -130,12 +193,15 @@ int main(int argc, char **argv)
 	time.dSeconds = 0;
 
 	struct cLocation location;
-	location.dLongitude = 112.933333;//data.longitude,
-    location.dLatitude = 28.183333;//data.latitude,
+	location.dLongitude = 112.933333;
+    location.dLatitude = 28.183333;
 
 	struct cSunCoordinates sunCoordinates;
 	sunpos(time, location, &sunCoordinates);
 	printf("%f\t%f\t%f\n", sunCoordinates.dAzimuth, sunCoordinates.dZenithAngle, sunCoordinates.dElevation);
+	
+	float max_azimuth, min_azimuth;
+	search_azimuth(&max_azimuth, &min_azimuth);
 	return 0;
 }
 

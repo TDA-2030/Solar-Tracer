@@ -157,6 +157,9 @@ int restart_count_get()
 
 void set_time(int year, int month, int day, int hour, int min, int sec)
 {
+    setenv("TZ", "CST-8", 1);
+    tzset();
+
     struct tm t = {0};        // Initalize to all 0's
     t.tm_year = year - 1900;    // This is year-1900, so 121 = 2021
     t.tm_mon = month - 1;

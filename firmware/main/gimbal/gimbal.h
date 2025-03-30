@@ -35,24 +35,26 @@ public:
     ~Gimbal();
     void init();
     void setTarget(float pitch, float roll, float yaw);
+    float getPitchTarget(){ return pitchTarget;}
+    float getYawTarget(){return yawTarget;}
     void check_home(float homing_speed);
 
     void update(const gps_t &data) override;
     void update(const imu_data_t &data) override;
-    void search_azimuth(float *max_azimuth, float *min_azimuth);
+    void search_azimuth(float *max_azimuth, float *min_azimuth, float *max_elevation, float *min_elevation);
     std::shared_ptr<IMUBmi270> imu;
     std::shared_ptr<AP_Compass_QMC5883P> compass;
     std::shared_ptr<GPS> gps;
     struct pid pitchPID;
     std::shared_ptr<Motor> pitchMotor;
     std::shared_ptr<Motor> yawMotor;
-    gps_t gpsData;
+    float gearRatio;
 
 private:
     static void update_task(void *pvParameters);
-    float gearRatio;
     float pitchTarget;
     float yawTarget;
+    float max_azimuth, min_azimuth, max_elevation, min_elevation;
 };
 
 #ifdef __cplusplus

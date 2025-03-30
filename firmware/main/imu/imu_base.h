@@ -13,15 +13,18 @@ typedef union {
     float data[3];
 } axis_t;
 
-typedef union {
-    struct {
-        axis_t acc;   // 加速度
-        axis_t gyro;  // 角速度
-        axis_t angle; // 角度
+typedef struct {
+    union {
+        struct {
+            axis_t acc;   // 加速度
+            axis_t gyro;  // 角速度
+            axis_t angle; // 角度
+        };
+        struct {
+            axis_t data[3];
+        };
     };
-    struct {
-        axis_t data[3];
-    };
+    float temperature;
 } imu_data_t;
 
 #ifdef __cplusplus
@@ -34,7 +37,10 @@ public:
     virtual ~IMUBase() = default;
 
     // 数据访问
-    const imu_data_t& getData() const { return imu_data; }
+    const imu_data_t &getData() const
+    {
+        return imu_data;
+    }
 
 protected:
     imu_data_t imu_data;

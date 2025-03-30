@@ -87,7 +87,7 @@ static void bmi270_enable_accel_gyro(struct bmi2_dev *bmi2_dev)
     int8_t rslt;
 
     /* Assign accel and gyro sensor to variable. */
-    uint8_t sensor_list[2] = { BMI2_ACCEL, BMI2_GYRO };
+    uint8_t sensor_list[3] = { BMI2_ACCEL, BMI2_GYRO, BMI2_TEMP };
 
     struct bmi2_sens_config config;
     /* Accel and gyro configuration settings. */
@@ -106,6 +106,17 @@ static void bmi270_enable_accel_gyro(struct bmi2_dev *bmi2_dev)
     }
 }
 
+float IMUBmi270::readTemperature()
+{
+    int8_t rslt;
+    struct bmi2_dev *bmi2_dev = bmi_handle;
+    uint16_t temperature_data;
+    rslt = bmi2_get_temperature_data(&temperature_data, bmi2_dev);
+    bmi2_error_codes_print_result(rslt);
+
+    float temperature_value = (float)((((float)((int16_t)temperature_data)) / 512.0) + 23.0);
+    return temperature_value;
+}
 
 void IMUBmi270::readData()
 {
@@ -115,6 +126,7 @@ void IMUBmi270::readData()
     struct bmi2_sens_data sensor_data;
     rslt = bmi2_get_sensor_data(&sensor_data, bmi2_dev);
     bmi2_error_codes_print_result(rslt);
+    _data.temperature = readTemperature();
 
     if ((rslt == BMI2_OK) && (sensor_data.status & BMI2_DRDY_ACC) && (sensor_data.status & BMI2_DRDY_GYR)) {
         /* Converting lsb to meter per second squared for 16 bit accelerometer at 2G range. */

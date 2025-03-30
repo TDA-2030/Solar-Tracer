@@ -1,6 +1,5 @@
 
 #include <memory>
-#include <math.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
@@ -10,10 +9,20 @@
 #include "setting.h"
 #include "sun_pos.h"
 #include "led.h"
+#include "board.h"
+#include "matrix.h"
 
 static const char *TAG = "gimbal";
 
 #define LPF(beta, prev, input) ((beta) * (input) + (1 - (beta)) * (prev))
+
+// 计算反射向量
+Vector3 reflect(const Vector3& incident, const Vector3& normal) {
+    Vector3 normalizedNormal = normal.normalize();
+    double dotProduct = incident.dot(normalizedNormal);
+    return incident - normalizedNormal * (2.0 * dotProduct);
+}
+
 
 Gimbal::Gimbal(): imu(nullptr), gps(nullptr), pitchMotor(nullptr), yawMotor(nullptr),
     pitchTarget(0), yawTarget(0)
@@ -39,7 +48,7 @@ void Gimbal::check_home(float homing_speed)
         vTaskDelay(pdMS_TO_TICKS(50));
         if (MOT_STATE_WARNING == this->yawMotor->get_state()) {
             vTaskDelay(pdMS_TO_TICKS(100));
-            this->yawMotor->get_position(&pos_max); // get positive limit
+            pos_max = this->yawMotor->get_position(); // get positive limit
             break;
         }
     }
@@ -48,7 +57,7 @@ void Gimbal::check_home(float homing_speed)
         vTaskDelay(pdMS_TO_TICKS(50));
         if (MOT_STATE_WARNING == this->yawMotor->get_state()) {
             vTaskDelay(pdMS_TO_TICKS(100));
-            this->yawMotor->get_position(&pos_min); // get negative limit
+            pos_min = this->yawMotor->get_position(); // get negative limit
             break;
         }
     }
@@ -58,14 +67,14 @@ void Gimbal::check_home(float homing_speed)
     // wait motor done
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(100));
-        float pos;
-        this->yawMotor->get_position(&pos);
-        if (fabs(pos - (pos_max + pos_min) / 2) < 0.1) {
+        float pos = this->yawMotor->get_position();
+        if (std::fabs(pos - (pos_max + pos_min) / 2) < 0.1) {
             break;
         }
     }
     vTaskDelay(pdMS_TO_TICKS(1000));
     this->yawMotor->clear_position();
+    this->pitchMotor->clear_position();
 }
 
 
@@ -74,7 +83,7 @@ void Gimbal::init()
     ESP_LOGI(TAG, "Gimbal initializing");
 
     this->gps = std::make_shared<GPS>();
-
+    this->gps->init();
     this->imu = std::make_shared<IMUBmi270>();
     uint8_t retry = 10;
     while (retry > 0) {
@@ -86,11 +95,24 @@ void Gimbal::init()
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     this->compass = std::make_shared<AP_Compass_QMC5883P>();
-    this->pitchMotor = std::make_shared<Motor>(1, 4 * 11);
-    this->yawMotor = std::make_shared<Motor>(0, 4 * 11);
+    this->pitchMotor = std::make_shared<Motor>("pitch");
+    this->yawMotor = std::make_shared<Motor>("yaw");
+    static EncoderSensor encoderx, encodery;
+    encoderx.init(BOARD_IO_MOTX_ENC_A, BOARD_IO_MOTX_ENC_B, 4 * 11);
+    encodery.init(BOARD_IO_MOTY_ENC_A, BOARD_IO_MOTY_ENC_B, 4 * 11);
+    static IMUMotSensor imusensory;
+    imusensory.init(this->imu.get()); // TODO save the params first
+    
+    static PWM pwmx, pwmy;
+    pwmx.init(BOARD_IO_MOTX_IN1, BOARD_IO_MOTX_IN2, 25000);
+    pwmy.init(BOARD_IO_MOTY_IN1, BOARD_IO_MOTY_IN2, 25000);
+    this->yawMotor->attach_sensor(&encoderx);
+    this->pitchMotor->attach_sensor(&imusensory);
+    this->yawMotor->attach_driver(&pwmx);
+    this->pitchMotor->attach_driver(&pwmy);
 
-    pid_struct_init(&this->pitchMotor->positionPID, &g_settings.pos_pid);
-    pid_struct_init(&this->pitchMotor->velocityPID, &g_settings.vel_pid);
+    pid_struct_init(&this->pitchMotor->positionPID, &g_settings.pitch_pos_pid);
+    pid_struct_init(&this->pitchMotor->velocityPID, &g_settings.pitch_vel_pid);
     pid_struct_init(&this->yawMotor->positionPID, &g_settings.pos_pid);
     pid_struct_init(&this->yawMotor->velocityPID, &g_settings.vel_pid);
 
@@ -102,16 +124,15 @@ void Gimbal::init()
     this->imu->registerObserver(gimbal);
     this->gps->registerObserver(gimbal);
 
+    setTarget(0, 0, 0);
+
     this->pitchMotor->enable(1);
     this->yawMotor->enable(1);
     this->pitchMotor->set_max_speed(100);
     this->yawMotor->set_max_speed(100);
 
-    gpsData.longitude = 112.933333;
-    gpsData.latitude = 28.183333;
-    set_time(2025, 3, 28, 10, 0, 0);
-    float max_azimuth, min_azimuth;
-    search_azimuth(&max_azimuth, &min_azimuth);
+    set_time(2025, 3, 28, 10, 0, 0, 0);
+    search_azimuth(&max_azimuth, &min_azimuth, &max_elevation, &min_elevation);
 
     led_start_state(LED_GREEN, BLINK_FAST);
     check_home(70);
@@ -147,28 +168,19 @@ void Gimbal::update(const imu_data_t &data)
     // printf("acc: %f %f %f\n", data.acc.x, data.acc.y, data.acc.z);
 
     // 只有pitch轴是由imu角度反馈控制的
-    static float last_spd_out = 0;
-    float output = pid_calculate(&pitchPID, data.angle.y, pitchTarget, dt);
-    last_spd_out = LPF(0.75, last_spd_out, output);
-    this->pitchMotor->set_position(last_spd_out);
+    // static float last_spd_out = 0;
+    // float output = pid_calculate(&pitchPID, data.angle.y, pitchTarget, dt);
+    // last_spd_out = LPF(0.75, last_spd_out, output);
+    // this->pitchMotor->set_position(last_spd_out);
     this->pitchMotor->run(dt);
     this->yawMotor->run(dt);
 }
 
 void Gimbal::update(const gps_t &data)
 {
-    gpsData = data;
     static int count = 0;
     if (count++ % 10 == 0) {
-        ESP_LOGI(TAG, "Gimbal updating gps, UTC Time:%d/%d/%d %d:%d:%d "
-                 "latitude = %.05f° "
-                 "longitude = %.05f° "
-                 "altitude = %.02fm "
-                 "speed = %fm/s",
-                 gpsData.date.year + 2000, gpsData.date.month, gpsData.date.day,
-                 gpsData.tim.hour, gpsData.tim.minute, gpsData.tim.second,
-                 gpsData.latitude, gpsData.longitude, gpsData.altitude, gpsData.speed);
-        set_time(data.date.year + 2000, data.date.month, data.date.day, data.tim.hour, data.tim.minute, data.tim.second);
+        set_time(data.date.year + 2000, data.date.month, data.date.day, data.tim.hour, data.tim.minute, data.tim.second, 1);
     }
 }
 
@@ -177,9 +189,10 @@ void Gimbal::update_task(void *pvParameters)
     auto pgimbal = (Gimbal *)pvParameters;
     while (1) {
         time_t now;
-        struct tm timeinfo;
+        struct tm timeinfo, localtime;
         time(&now);
         gmtime_r(&now, &timeinfo);
+        localtime_r(&now, &localtime);
 
         cTime time = {
             .iYear = timeinfo.tm_year + 1900,
@@ -190,19 +203,22 @@ void Gimbal::update_task(void *pvParameters)
             .dSeconds = (double)timeinfo.tm_sec,
         };
         cLocation location = {
-            .dLongitude = pgimbal->gpsData.longitude,
-            .dLatitude = pgimbal->gpsData.latitude,
+            .dLongitude = pgimbal->gps->getData().longitude,
+            .dLatitude = pgimbal->gps->getData().latitude,
         };
         cSunCoordinates sunCoordinates;
         sunpos(time, location, &sunCoordinates);
-        ESP_LOGI(TAG, "UTC Time:%d-%d-%d %d:%d:%d  Elevation:%f°, Azimuth:%f°, Zenith:%f°", time.iYear, time.iMonth, time.iDay, (int)time.dHours, (int)time.dMinutes, (int)time.dSeconds,
+        ESP_LOGI(TAG, "UTC Time:%d-%d-%d %d:%d:%d LocalTime:%d-%d-%d %d:%d:%d Elevation:%.2f°, Azimuth:%.2f°, Zenith:%.2f°", time.iYear, time.iMonth, time.iDay, (int)time.dHours, (int)time.dMinutes, (int)time.dSeconds,
+                 localtime.tm_year + 1900, localtime.tm_mon + 1, localtime.tm_mday, localtime.tm_hour, localtime.tm_min, localtime.tm_sec,
                  sunCoordinates.dElevation, sunCoordinates.dAzimuth, sunCoordinates.dZenithAngle);
         if (g_settings.mode == MODE_AUTO) {
             if (sunCoordinates.dElevation > 0) {
                 ESP_LOGI(TAG, "Sun is above horizon setting target");
-                pgimbal->setTarget(sunCoordinates.dZenithAngle, 0, 0);
+                float Aziimuth_mid = 180;//(pgimbal->max_azimuth + pgimbal->min_azimuth) / 2;
+                pgimbal->setTarget(sunCoordinates.dZenithAngle, 0, sunCoordinates.dAzimuth - Aziimuth_mid);
             } else {
-                ESP_LOGI(TAG, "Sun is below horizon");
+                ESP_LOGI(TAG, "Sun is below horizon, setting target to 0");
+                pgimbal->setTarget(0, 0, 0);
             }
         }
         vTaskDelay(pdMS_TO_TICKS(10000));
@@ -215,12 +231,15 @@ void Gimbal::setTarget(float pitch, float roll, float yaw)
     this->pitchTarget = pitch;
     this->yawTarget = yaw;
     this->yawMotor->set_position((yawTarget + g_settings.yaw_offset) * gearRatio / 360);
+    this->pitchMotor->set_position(pitchTarget);
 }
 
-void Gimbal::search_azimuth(float *max_azimuth, float *min_azimuth)
+void Gimbal::search_azimuth(float *max_azimuth, float *min_azimuth, float *max_elevation, float *min_elevation)
 {
     *max_azimuth = 0;
     *min_azimuth = 360;
+    *max_elevation = -360;
+    *min_elevation = 360;
     // search maximum and minimum azimuth in a day
     time_t now;
     struct tm local_time;
@@ -233,10 +252,9 @@ void Gimbal::search_azimuth(float *max_azimuth, float *min_azimuth)
     local_time.tm_sec = 0;
 	time_t start_time = mktime(&local_time);
 
-    // 假设的 GPS 数据
     cLocation location = {
-        .dLongitude = gpsData.longitude,
-        .dLatitude = gpsData.latitude,
+        .dLongitude = gps->getData().longitude,
+        .dLatitude = gps->getData().latitude,
     };
 
     // 模拟从6点到18点每隔30分钟计算一次
@@ -266,6 +284,14 @@ void Gimbal::search_azimuth(float *max_azimuth, float *min_azimuth)
             *min_azimuth = sunCoordinates.dAzimuth;
         }
 
+        // 更新Elevation的最大值和最小值
+        if (sunCoordinates.dElevation > *max_elevation) {
+            *max_elevation = sunCoordinates.dElevation;
+        }
+        if (sunCoordinates.dElevation < *min_elevation) {
+            *min_elevation = sunCoordinates.dElevation;
+        }
+
         // 打印结果
         printf("UTC Time: %d-%02d-%02d %02d:%02d:%02d  Elevation: %.2f°, Azimuth: %.2f°, Zenith: %.2f°\n",
                utcTimeStruct.iYear, utcTimeStruct.iMonth, utcTimeStruct.iDay, (int)utcTimeStruct.dHours, (int)utcTimeStruct.dMinutes, (int)utcTimeStruct.dSeconds,
@@ -275,5 +301,6 @@ void Gimbal::search_azimuth(float *max_azimuth, float *min_azimuth)
         start_time += 30 * 60;
     }
 
-    printf("Azimuth maximum: %.2f°, minimum: %.2f°\n", *max_azimuth, *min_azimuth);
+    printf("Azimuth maximum:%.2f°, minimum:%.2f°, midpoint:%.2f\n", *max_azimuth, *min_azimuth, (*max_azimuth + *min_azimuth) / 2);
+    printf("Elevation maximum:%.2f°, minimum:%.2f°, midpoint:%.2f\n", *max_elevation, *min_elevation, (*max_elevation + *min_elevation) / 2);
 }

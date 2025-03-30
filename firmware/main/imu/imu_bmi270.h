@@ -26,6 +26,7 @@ public:
     ~IMUBmi270();
 
     int init();
+    float readTemperature();
 
     void readData();
 private:

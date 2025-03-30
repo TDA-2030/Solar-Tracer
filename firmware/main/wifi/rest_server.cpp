@@ -168,7 +168,6 @@ static double cjson_get_num(cJSON *obj, const char *name)
     },
 }
 */
-static const float FACTOR = 20.0f;
 
 static esp_err_t setting_post_handler(httpd_req_t *req)
 {
@@ -204,27 +203,35 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
     if (pid) {
         cJSON *pos = cJSON_GetObjectItem(pid, "pos");
         cJSON *vel = cJSON_GetObjectItem(pid, "vel");
-        cJSON *pitch = cJSON_GetObjectItem(pid, "pitch");
+        cJSON *pitch_pos = cJSON_GetObjectItem(pid, "pitch_pos");
+        cJSON *pitch_vel = cJSON_GetObjectItem(pid, "pitch_vel");
         if (pos) {
-            g_settings.pos_pid.p = cJSON_GetObjectItem(pos, "p")->valuedouble * FACTOR;
-            g_settings.pos_pid.i = cJSON_GetObjectItem(pos, "i")->valuedouble * FACTOR;
-            g_settings.pos_pid.d = cJSON_GetObjectItem(pos, "d")->valuedouble * FACTOR;
+            g_settings.pos_pid.p = cJSON_GetObjectItem(pos, "p")->valuedouble;
+            g_settings.pos_pid.i = cJSON_GetObjectItem(pos, "i")->valuedouble;
+            g_settings.pos_pid.d = cJSON_GetObjectItem(pos, "d")->valuedouble;
             g_settings.pos_pid.max_out = cJSON_GetObjectItem(pos, "maxout")->valuedouble;
             g_settings.pos_pid.integral_limit = cJSON_GetObjectItem(pos, "maxitg")->valuedouble;
         }
         if (vel) {
-            g_settings.vel_pid.p = cJSON_GetObjectItem(vel, "p")->valuedouble * FACTOR;
-            g_settings.vel_pid.i = cJSON_GetObjectItem(vel, "i")->valuedouble * FACTOR;
-            g_settings.vel_pid.d = cJSON_GetObjectItem(vel, "d")->valuedouble * FACTOR;
+            g_settings.vel_pid.p = cJSON_GetObjectItem(vel, "p")->valuedouble;
+            g_settings.vel_pid.i = cJSON_GetObjectItem(vel, "i")->valuedouble;
+            g_settings.vel_pid.d = cJSON_GetObjectItem(vel, "d")->valuedouble;
             g_settings.vel_pid.max_out = cJSON_GetObjectItem(vel, "maxout")->valuedouble;
             g_settings.vel_pid.integral_limit = cJSON_GetObjectItem(vel, "maxitg")->valuedouble;
         }
-        if (pitch) {
-            g_settings.pitch_pid.p = cJSON_GetObjectItem(pitch, "p")->valuedouble * FACTOR;
-            g_settings.pitch_pid.i = cJSON_GetObjectItem(pitch, "i")->valuedouble * FACTOR;
-            g_settings.pitch_pid.d = cJSON_GetObjectItem(pitch, "d")->valuedouble * FACTOR;
-            g_settings.pitch_pid.max_out = cJSON_GetObjectItem(pitch, "maxout")->valuedouble;
-            g_settings.pitch_pid.integral_limit = cJSON_GetObjectItem(pitch, "maxitg")->valuedouble;
+        if (pitch_pos) {
+            g_settings.pitch_pos_pid.p = cJSON_GetObjectItem(pitch_pos, "p")->valuedouble;
+            g_settings.pitch_pos_pid.i = cJSON_GetObjectItem(pitch_pos, "i")->valuedouble;
+            g_settings.pitch_pos_pid.d = cJSON_GetObjectItem(pitch_pos, "d")->valuedouble;
+            g_settings.pitch_pos_pid.max_out = cJSON_GetObjectItem(pitch_pos, "maxout")->valuedouble;
+            g_settings.pitch_pos_pid.integral_limit = cJSON_GetObjectItem(pitch_pos, "maxitg")->valuedouble;
+        }
+        if (pitch_vel) {
+            g_settings.pitch_vel_pid.p = cJSON_GetObjectItem(pitch_vel, "p")->valuedouble;
+            g_settings.pitch_vel_pid.i = cJSON_GetObjectItem(pitch_vel, "i")->valuedouble;
+            g_settings.pitch_vel_pid.d = cJSON_GetObjectItem(pitch_vel, "d")->valuedouble;
+            g_settings.pitch_vel_pid.max_out = cJSON_GetObjectItem(pitch_vel, "maxout")->valuedouble;
+            g_settings.pitch_vel_pid.integral_limit = cJSON_GetObjectItem(pitch_vel, "maxitg")->valuedouble;
         }
     }
 
@@ -269,12 +276,82 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-void setTime(int sc, int mn, int hr, int dy, int mt, int yr) 
+static esp_err_t setting_get_handler(httpd_req_t *req)
 {
-    // seconds, minute, hour, day, month, year $ microseconds(optional)
-    // ie setTime(20, 34, 8, 1, 4, 2021) = 8:34:20 1/4/2021
-    
+    httpd_resp_set_type(req, "application/json");
 
+    // 创建根对象
+    cJSON *root = cJSON_CreateObject();
+
+    // 创建 pid 对象
+    cJSON *pid = cJSON_CreateObject();
+    cJSON *pos = cJSON_CreateObject();
+    cJSON *vel = cJSON_CreateObject();
+
+    // 添加 pos 参数
+    cjson_add_num_as_str(pos, "p", g_settings.pos_pid.p);
+    cjson_add_num_as_str(pos, "i", g_settings.pos_pid.i);
+    cjson_add_num_as_str(pos, "d", g_settings.pos_pid.d);
+    cjson_add_num_as_str(pos, "maxout", g_settings.pos_pid.max_out);
+    cjson_add_num_as_str(pos, "maxitg", g_settings.pos_pid.integral_limit);
+
+    // 添加 vel 参数
+    cjson_add_num_as_str(vel, "p", g_settings.vel_pid.p);
+    cjson_add_num_as_str(vel, "i", g_settings.vel_pid.i);
+    cjson_add_num_as_str(vel, "d", g_settings.vel_pid.d);
+    cjson_add_num_as_str(vel, "maxout", g_settings.vel_pid.max_out);
+    cjson_add_num_as_str(vel, "maxitg", g_settings.vel_pid.integral_limit);
+
+    // 添加 pitch 参数
+    cJSON *pitch_pos = cJSON_CreateObject();
+    cjson_add_num_as_str(pitch_pos, "p", g_settings.pitch_pos_pid.p);
+    cjson_add_num_as_str(pitch_pos, "i", g_settings.pitch_pos_pid.i);
+    cjson_add_num_as_str(pitch_pos, "d", g_settings.pitch_pos_pid.d);
+    cjson_add_num_as_str(pitch_pos, "maxout", g_settings.pitch_pos_pid.max_out);
+    cjson_add_num_as_str(pitch_pos, "maxitg", g_settings.pitch_pos_pid.integral_limit);
+
+    // 添加 pitch 参数
+    cJSON *pitch_vel = cJSON_CreateObject();
+    cjson_add_num_as_str(pitch_vel, "p", g_settings.pitch_vel_pid.p);
+    cjson_add_num_as_str(pitch_vel, "i", g_settings.pitch_vel_pid.i);
+    cjson_add_num_as_str(pitch_vel, "d", g_settings.pitch_vel_pid.d);
+    cjson_add_num_as_str(pitch_vel, "maxout", g_settings.pitch_vel_pid.max_out);
+    cjson_add_num_as_str(pitch_vel, "maxitg", g_settings.pitch_vel_pid.integral_limit);
+
+    // 组装 pid
+    cJSON_AddItemToObject(pid, "pos", pos);
+    cJSON_AddItemToObject(pid, "vel", vel);
+    cJSON_AddItemToObject(pid, "pitch_pos", pitch_pos);
+    cJSON_AddItemToObject(pid, "pitch_vel", pitch_vel);
+    cJSON_AddItemToObject(root, "pid", pid);
+
+    // 添加 mode
+    cJSON_AddStringToObject(root, "mode", g_settings.mode == MODE_MANUAL ? "manual" : "auto");
+
+    cjson_add_num_as_str(root, "yaw_offset", g_settings.yaw_offset);
+
+    // 创建 th 对象
+    cJSON *th = cJSON_CreateObject();
+    cjson_add_num_as_str(th, "maxv", g_settings.vol_max);
+    cjson_add_num_as_str(th, "minv", g_settings.vol_min);
+    cJSON_AddItemToObject(root, "th", th);
+
+    // 创建 man 对象
+    cJSON *man = cJSON_CreateObject();
+    cjson_add_num_as_str(man, "pitch", g_settings.target_pitch);
+    cjson_add_num_as_str(man, "yaw", g_settings.target_yaw);
+    cJSON_AddItemToObject(root, "man", man);
+
+    // 打印 JSON 字符串
+    char *json_string = cJSON_PrintUnformatted(root);
+    printf("%s\n", json_string);
+
+    httpd_resp_sendstr(req, json_string);
+
+    // 释放内存
+    free((void *)json_string);
+    cJSON_Delete(root);
+    return ESP_OK;
 }
 
 static esp_err_t location_post_handler(httpd_req_t *req)
@@ -307,17 +384,19 @@ static esp_err_t location_post_handler(httpd_req_t *req)
     }
     printf("Received JSON: %s\n", buf);
     // 解析 location
-    gimbal.gpsData.latitude = cjson_get_num(root, "latitude");
-    gimbal.gpsData.longitude = cjson_get_num(root, "longitude");
-    cJSON *time = cJSON_GetObjectItem(root, "time");
+    gps_t gpsData;
+    gpsData.valid = true;
+    gpsData.latitude = cjson_get_num(root, "latitude");
+    gpsData.longitude = cjson_get_num(root, "longitude");
+    cJSON *time = cJSON_GetObjectItem(root, "utctime");
     if (time) {
-        gimbal.gpsData.date.year = cjson_get_num(time, "year") - 2000;
-        gimbal.gpsData.date.month = cjson_get_num(time, "month");
-        gimbal.gpsData.date.day = cjson_get_num(time, "day");
-        gimbal.gpsData.tim.hour = cjson_get_num(time, "hours");
-        gimbal.gpsData.tim.minute = cjson_get_num(time, "minutes");
-        gimbal.gpsData.tim.second = cjson_get_num(time, "seconds");
-        gimbal.update(gimbal.gpsData);
+        gpsData.date.year = cjson_get_num(time, "year") - 2000;
+        gpsData.date.month = cjson_get_num(time, "month");
+        gpsData.date.day = cjson_get_num(time, "day");
+        gpsData.tim.hour = cjson_get_num(time, "hours");
+        gpsData.tim.minute = cjson_get_num(time, "minutes");
+        gpsData.tim.second = cjson_get_num(time, "seconds");
+        gimbal.update(gpsData);
     }
 
     cJSON_Delete(root);
@@ -325,72 +404,46 @@ static esp_err_t location_post_handler(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t setting_get_handler(httpd_req_t *req)
+static esp_err_t sysctrl_post_handler(httpd_req_t *req)
 {
-    httpd_resp_set_type(req, "application/json");
+    int total_len = req->content_len;
+    int cur_len = 0;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int received = 0;
+    if (total_len >= SCRATCH_BUFSIZE) {
+        /* Respond with 500 Internal Server Error */
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "content too long");
+        return ESP_FAIL;
+    }
+    while (cur_len < total_len) {
+        received = httpd_req_recv(req, buf + cur_len, total_len);
+        if (received <= 0) {
+            /* Respond with 500 Internal Server Error */
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to post control value");
+            return ESP_FAIL;
+        }
+        cur_len += received;
+    }
+    buf[total_len] = '\0';
 
-    // 创建根对象
-    cJSON *root = cJSON_CreateObject();
+    cJSON *root = cJSON_Parse(buf);
+    if (!root) {
+        printf("Error parsing JSON!\n");
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Error parsing JSON!");
+        return ESP_FAIL;
+    }
+    printf("Received JSON: %s\n", buf);
+    // 解析 restart
+    cJSON *restart = cJSON_GetObjectItem(root, "restart");
+    if (restart) {
+        if (restart->valueint == 1) {
+            printf("Restarting...\n");
+            esp_restart();
+        }
+    }
 
-    // 创建 pid 对象
-    cJSON *pid = cJSON_CreateObject();
-    cJSON *pos = cJSON_CreateObject();
-    cJSON *vel = cJSON_CreateObject();
-    cJSON *pitch = cJSON_CreateObject();
-
-    // 添加 pos 参数
-    cjson_add_num_as_str(pos, "p", g_settings.pos_pid.p / FACTOR);
-    cjson_add_num_as_str(pos, "i", g_settings.pos_pid.i / FACTOR);
-    cjson_add_num_as_str(pos, "d", g_settings.pos_pid.d / FACTOR);
-    cjson_add_num_as_str(pos, "maxout", g_settings.pos_pid.max_out);
-    cjson_add_num_as_str(pos, "maxitg", g_settings.pos_pid.integral_limit);
-
-    // 添加 vel 参数
-    cjson_add_num_as_str(vel, "p", g_settings.vel_pid.p / FACTOR);
-    cjson_add_num_as_str(vel, "i", g_settings.vel_pid.i / FACTOR);
-    cjson_add_num_as_str(vel, "d", g_settings.vel_pid.d / FACTOR);
-    cjson_add_num_as_str(vel, "maxout", g_settings.vel_pid.max_out);
-    cjson_add_num_as_str(vel, "maxitg", g_settings.vel_pid.integral_limit);
-
-    // 添加 pitch 参数
-    cjson_add_num_as_str(pitch, "p", g_settings.pitch_pid.p / FACTOR);
-    cjson_add_num_as_str(pitch, "i", g_settings.pitch_pid.i / FACTOR);
-    cjson_add_num_as_str(pitch, "d", g_settings.pitch_pid.d / FACTOR);
-    cjson_add_num_as_str(pitch, "maxout", g_settings.pitch_pid.max_out);
-    cjson_add_num_as_str(pitch, "maxitg", g_settings.pitch_pid.integral_limit);
-
-    // 组装 pid
-    cJSON_AddItemToObject(pid, "pos", pos);
-    cJSON_AddItemToObject(pid, "vel", vel);
-    cJSON_AddItemToObject(pid, "pitch", pitch);
-    cJSON_AddItemToObject(root, "pid", pid);
-
-    // 添加 mode
-    cJSON_AddStringToObject(root, "mode", g_settings.mode == MODE_MANUAL ? "manual" : "auto");
-
-    cjson_add_num_as_str(root, "yaw_offset", g_settings.yaw_offset);
-
-    // 创建 th 对象
-    cJSON *th = cJSON_CreateObject();
-    cjson_add_num_as_str(th, "maxv", g_settings.vol_max);
-    cjson_add_num_as_str(th, "minv", g_settings.vol_min);
-    cJSON_AddItemToObject(root, "th", th);
-
-    // 创建 man 对象
-    cJSON *man = cJSON_CreateObject();
-    cjson_add_num_as_str(man, "pitch", g_settings.target_pitch);
-    cjson_add_num_as_str(man, "yaw", g_settings.target_yaw);
-    cJSON_AddItemToObject(root, "man", man);
-
-    // 打印 JSON 字符串
-    char *json_string = cJSON_PrintUnformatted(root);
-    printf("%s\n", json_string);
-
-    httpd_resp_sendstr(req, json_string);
-
-    // 释放内存
-    free((void *)json_string);
     cJSON_Delete(root);
+    httpd_resp_sendstr(req, "Post control value successfully");
     return ESP_OK;
 }
 
@@ -415,7 +468,7 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
 
 
 /* Simple handler for getting imu data */
-static esp_err_t imu_data_get_handler(httpd_req_t *req)
+static esp_err_t realtime_data_get_handler(httpd_req_t *req)
 {
     httpd_resp_set_type(req, "application/json");
 
@@ -438,7 +491,29 @@ static esp_err_t imu_data_get_handler(httpd_req_t *req)
     cJSON_AddItemToObject(root, "acc", acceleration);
     cJSON_AddItemToObject(root, "angle", angle);
 
-    cjson_add_num_as_str(root, "vol", adc_read_voltage());
+    cJSON *panel = cJSON_CreateObject();
+    cjson_add_num_as_str(panel, "Azimuth", gimbal.getYawTarget());
+    cjson_add_num_as_str(panel, "Elevation", gimbal.getPitchTarget());
+    cjson_add_num_as_str(panel, "voltage", adc_read_voltage());
+    cjson_add_num_as_str(panel, "temperature", gimbal.imu->getData().temperature);
+    cjson_add_num_as_str(panel, "longtiude", gimbal.gps->getData().longitude);
+    cjson_add_num_as_str(panel, "latitude", gimbal.gps->getData().latitude);
+    time_t now;
+    time(&now);
+    cJSON_AddNumberToObject(panel, "time", now);
+    cJSON_AddItemToObject(root, "panel", panel);
+
+    cJSON *yawmotor = cJSON_CreateObject();
+    cjson_add_num_as_str(yawmotor, "state", gimbal.yawMotor->get_state());
+    cjson_add_num_as_str(yawmotor, "speed", gimbal.yawMotor->get_velocity());
+    cjson_add_num_as_str(yawmotor, "angle", gimbal.yawMotor->get_position()*360/gimbal.gearRatio);
+    cJSON_AddItemToObject(root, "YawMotor", yawmotor);
+
+    cJSON *pitchmotor = cJSON_CreateObject();
+    cjson_add_num_as_str(pitchmotor, "state", gimbal.pitchMotor->get_state());
+    cjson_add_num_as_str(pitchmotor, "speed", gimbal.pitchMotor->get_velocity());
+    cjson_add_num_as_str(pitchmotor, "angle", gimbal.pitchMotor->get_position());
+    cJSON_AddItemToObject(root, "PitchMotor", pitchmotor);
 
     // 打印 JSON 字符串
     const char *json_string = cJSON_PrintUnformatted(root);
@@ -492,8 +567,9 @@ esp_err_t WebServer::start()
     on("/api/v1/sysinfo", HTTP_GET, system_info_get_handler, rest_context);
     on("/api/v1/setting", HTTP_GET, setting_get_handler, rest_context);
     on("/api/v1/setting", HTTP_POST, setting_post_handler, rest_context);
+    on("/api/v1/sysctrl", HTTP_POST, sysctrl_post_handler, rest_context);
     on("/api/v1/location", HTTP_POST, location_post_handler, rest_context);
-    on("/api/v1/temp/raw", HTTP_GET, imu_data_get_handler, rest_context);
+    on("/api/v1/temp/raw", HTTP_GET, realtime_data_get_handler, rest_context);
     on("/*", HTTP_GET, rest_common_get_handler, rest_context);
 
     return ESP_OK;

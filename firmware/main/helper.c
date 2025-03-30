@@ -155,19 +155,26 @@ int restart_count_get()
     return restart_count;
 }
 
-void set_time(int year, int month, int day, int hour, int min, int sec)
+void set_time(int year, int month, int day, int hour, int min, int sec, bool is_utc)
 {
-    setenv("TZ", "CST-8", 1);
-    tzset();
-
-    struct tm t = {0};        // Initalize to all 0's
-    t.tm_year = year - 1900;    // This is year-1900, so 121 = 2021
-    t.tm_mon = month - 1;
-    t.tm_mday = day;
-    t.tm_hour = hour;
-    t.tm_min = min;
-    t.tm_sec = sec;
-    time_t timeSinceEpoch = mktime(&t);
+    struct tm timeinfo = {0};
+    timeinfo.tm_year = year - 1900;
+    timeinfo.tm_mon = month - 1;
+    timeinfo.tm_mday = day;
+    timeinfo.tm_hour = hour;
+    timeinfo.tm_min = min;
+    timeinfo.tm_sec = sec;
+    if (is_utc) {
+        setenv("TZ", "UTC+0", 1);
+    } else {
+        setenv("TZ", "CST-8", 1);
+    }
+    tzset(); // Set timezone
+    time_t timeSinceEpoch = mktime(&timeinfo);
     struct timeval now = { .tv_sec = timeSinceEpoch };
     settimeofday(&now, NULL);
+
+    // reconfig timezone
+    setenv("TZ", "CST-8", 1);
+    tzset();
 }

@@ -23,11 +23,12 @@ static led_indicator_handle_t red_led_handle = NULL;
  *
  */
 static const blink_step_t double_blink[] = {
-    {LED_BLINK_HOLD, LED_STATE_ON, 500},
-    {LED_BLINK_HOLD, LED_STATE_OFF, 500},
-    {LED_BLINK_HOLD, LED_STATE_ON, 500},
-    {LED_BLINK_HOLD, LED_STATE_OFF, 500},
-    {LED_BLINK_STOP, 0, 0},
+    {LED_BLINK_HOLD, LED_STATE_ON, 100},
+    {LED_BLINK_HOLD, LED_STATE_OFF, 100},
+    {LED_BLINK_HOLD, LED_STATE_ON, 100},
+    {LED_BLINK_HOLD, LED_STATE_OFF, 100},
+    {LED_BLINK_HOLD, LED_STATE_OFF, 600},
+    {LED_BLINK_LOOP, 0, 0},
 };
 
 /**
@@ -41,7 +42,7 @@ static const blink_step_t triple_blink[] = {
     {LED_BLINK_HOLD, LED_STATE_OFF, 500},
     {LED_BLINK_HOLD, LED_STATE_ON, 500},
     {LED_BLINK_HOLD, LED_STATE_OFF, 500},
-    {LED_BLINK_STOP, 0, 0},
+    {LED_BLINK_LOOP, 0, 0},
 };
 
 static const blink_step_t fast_blink[] = {

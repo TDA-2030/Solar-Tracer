@@ -6,11 +6,15 @@
         <v-row align="center">
           <v-col cols="6">
             <v-radio-group v-model="mode" inline>
-              <v-radio label="Auto Mode" value="auto"></v-radio>
               <v-radio label="Manual Mode" value="manual"></v-radio>
+              <v-radio label="Toward Mode" value="toward"></v-radio>
+              <v-radio label="Reflect Mode" value="reflect"></v-radio>
             </v-radio-group>
           </v-col>
           <v-col cols="6" class="text-right">
+            <v-btn class="mr-4" color="warning" variant="elevated" @click="restartServer">
+              Restart
+            </v-btn>
             <v-btn class="mr-4" color="teal" variant="elevated" @click="readSettingData">
               Load
             </v-btn>
@@ -26,11 +30,12 @@
         <v-card>
           <v-card-title>Angle Control</v-card-title>
           <v-card-text>
-            <v-slider v-model="controlData.azimuth" label="Azimuth" min="0" max="360" step="1" thumb-label
-              :disabled="mode === 'auto'"></v-slider>
+            <v-slider v-model="controlData.man.yaw" label="Azimuth" min="-180" max="180" step="1" thumb-label="always"
+              :disabled="mode === 'toward'"></v-slider>
 
-            <v-slider v-model="controlData.elevation" label="Elevation" min="0" max="90" step="1" thumb-label
-              :disabled="mode === 'auto'"></v-slider>
+            <v-slider v-model="controlData.man.pitch" label="Elevation" min="-90" max="90" step="1" thumb-label="always"
+              :disabled="mode === 'toward'"></v-slider>
+            <v-text-field v-model="controlData.yaw_offset" label="Yaw Offset Angle (°)" type="number"></v-text-field>
           </v-card-text>
         </v-card>
       </v-col>
@@ -40,46 +45,37 @@
         <v-card>
           <v-card-title>Threshold Settings</v-card-title>
           <v-card-text>
-            <v-text-field v-model="controlData.angleDeviation" label="Angle Deviation (°)" type="number"></v-text-field>
-
-            <v-range-slider v-model="voltageRange" label="Voltage Range" min="0" max="50" step="0.1"
-              thumb-label></v-range-slider>
+            <v-range-slider v-model="voltageRange" label="Voltage Range" min="4" max="14" step="0.1" thumb-label="always"></v-range-slider>
           </v-card-text>
 
         </v-card>
       </v-col>
 
       <!-- PID控制器设置 -->
-      <v-col cols="12" md="6">
+      <v-col cols="12" md="6" v-for="(piditem, pidname) in controlData.pid ":key="pidname">
         <v-card>
-          <v-card-title>Position PID Control</v-card-title>
+          <v-card-title>{{ pidname }} PID Control</v-card-title>
           <v-card-text>
-            <v-slider v-model="controlData.pos_pid.Kp" label="Kp" min="0" max="1" step="0.01" thumb-label></v-slider>
-            <v-slider v-model="controlData.pos_pid.Ki" label="Ki" min="0" max="1" step="0.01" thumb-label></v-slider>
-            <v-slider v-model="controlData.pos_pid.Kd" label="Kd" min="0" max="1" step="0.01" thumb-label></v-slider>
+            <v-slider v-for="(value, key) in piditem" :label="key" v-model="piditem[key]" min="0" :max="pid_param_max[pidname][key]" step="0.01" thumb-label="always">
+              <template v-slot:append>
+              <v-text-field v-model="pid_param_max[pidname][key]" density="compact" style="width: 85px; height: 30px" type="number" hide-details single-line ></v-text-field>
+            </template>
+            </v-slider>
           </v-card-text>
         </v-card>
       </v-col>
 
-      <v-col cols="12" md="6">
-        <v-card>
-          <v-card-title>Velocity PID Control</v-card-title>
-          <v-card-text>
-            <v-slider v-model="controlData.vel_pid.Kp" label="Kp" min="0" max="1" step="0.01" thumb-label></v-slider>
-            <v-slider v-model="controlData.vel_pid.Ki" label="Ki" min="0" max="1" step="0.01" thumb-label></v-slider>
-            <v-slider v-model="controlData.vel_pid.Kd" label="Kd" min="0" max="1" step="0.01" thumb-label></v-slider>
-          </v-card-text>
-        </v-card>
-      </v-col>
     </v-row>
   </v-container>
 </template>
 
 <script setup>
-import { computed } from 'vue' // 添加 computed 导入
+import { onMounted, onUnmounted} from 'vue'
+import { computed, ref } from 'vue' // 添加 computed 导入
 import { useSolarStore } from '../stores/solarStore'
 import { storeToRefs } from 'pinia'
 import axios from 'axios'
+import { convertToNumbers } from '../utils/typeConversion'
 
 const store = useSolarStore()
 const { controlData } = storeToRefs(store)
@@ -92,37 +88,28 @@ const mode = computed({
 })
 
 const voltageRange = computed({
-  get: () => [controlData.value.voltageMin, controlData.value.voltageMax],
+  get: () => [controlData.value.th.minv, controlData.value.th.maxv],
   set: (val) => {
-    controlData.value.voltageMin = val[0]
-    controlData.value.voltageMax = val[1]
+    controlData.value.th.minv = val[0]
+    controlData.value.th.maxv = val[1]
   }
 })
 
+const pid_param_max = ref({
+    pos: { p: 1000, i: 1000, d: 10, maxout: 1000, maxitg: 1000 },
+    vel: { p: 30, i: 100, d: 10, maxout: 1000, maxitg: 1000 },
+    pitch_pos: { p: 200, i: 100, d: 1, maxout: 1000, maxitg: 1000 },
+    pitch_vel: { p: 200, i: 100, d: 1, maxout: 1000, maxitg: 1000 },
+})
+
+onMounted(() => {
+  console.log('ControlView mounted')
+  readSettingData()
+})
+
 const sendSettingData = () => {
-  axios.post("/api/v1/setting", {
-    pid: {
-        pos: {
-          p: controlData.value.pos_pid.Kp,
-          i: controlData.value.pos_pid.Ki,
-          d: controlData.value.pos_pid.Kd,
-        },
-        vel: {
-          p: controlData.value.vel_pid.Kp,
-          i: controlData.value.vel_pid.Ki,
-          d: controlData.value.vel_pid.Kd,
-        },
-      },
-      mode: controlData.value.mode,
-      th: {
-        maxv: controlData.value.voltageMax,
-        minv: controlData.value.voltageMin,
-      },
-      man: {
-        pitch: controlData.value.elevation,
-        yaw: controlData.value.azimuth,
-      },
-  })
+  const _data = convertToNumbers(controlData.value);
+  axios.post("/api/v1/setting", _data )
     .then(data => {
       console.log(data.data);
     })
@@ -135,27 +122,23 @@ const readSettingData = () => {
   axios.get('/api/v1/setting')
     .then(response => {
       const data = response.data
-      store.saveSettingData({
-        mode: data.mode,
-        azimuth: data.man.yaw,
-        elevation: data.man.pitch,
-        angleDeviation: data.th.maxv - data.th.minv,
-        voltageMin: data.th.minv,
-        voltageMax: data.th.maxv,
-        pos_pid: {
-          Kp: data.pid.pos.p,
-          Ki: data.pid.pos.i,
-          Kd: data.pid.pos.d,
-        },
-        vel_pid: {
-          Kp: data.pid.vel.p,
-          Ki: data.pid.vel.i,
-          Kd: data.pid.vel.d,
-        }
-      })
+      store.updateSettingData(data)
     })
     .catch(error => {
       console.error('Error fetching data:', error)
     })
+}
+
+const restartServer = () => {
+  // check user confirm
+  if (confirm("Are you sure you want to restart the server?")) {
+    axios.post('/api/v1/sysctrl', { restart: 1 })
+    .then(response => {
+      console.log('Server restarted:', response.data)
+    })
+    .catch(error => {
+      console.error('Error restarting server:', error)
+    })
+  }
 }
 </script>

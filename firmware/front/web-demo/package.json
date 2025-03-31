@@ -17,6 +17,7 @@
     "vuetify": "^3.7.0-beta.1"
   },
   "devDependencies": {
+    "@mdi/js": "^7.4.47",
     "@vitejs/plugin-vue": "^5.2.1",
     "express": "^4.21.2",
     "material-design-icons-iconfont": "^6.7.0",

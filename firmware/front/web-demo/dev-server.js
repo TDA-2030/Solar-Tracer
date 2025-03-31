@@ -25,38 +25,41 @@ app.get('/v1/temp/raw', (req, res) => {
   console.log('Sent raw data', data);
 });
 
+
+var __data = {
+  pid: {
+    pos: {
+      p: 0.1,
+      i: 0.1,
+      d: 0.1,
+    },
+    vel: {
+      p: 0.1,
+      i: 0.1,
+      d: 0.1,
+    },
+  },
+  mode: "auto",
+  th: {
+    maxv: 12.1,
+    minv: 10.1,
+  },
+  man: {
+    pitch: 20,
+    yaw: 30,
+  },
+};
+
 app.post('/v1/setting', (req, res) => {
-  const controlData = req.body;
-  console.log('Received setting data:', controlData);
+  __data = req.body;
+  console.log('Received setting data:', __data);
   res.json({ message: 'setting data received' });
 });
 
 app.get('/v1/setting', (req, res) => {
-  const data = {
-    pid: {
-      pos: {
-        p: 0.1,
-        i: 0.1,
-        d: 0.1,
-      },
-      vel: {
-        p: 0.1,
-        i: 0.1,
-        d: 0.1,
-      },
-    },
-    mode: "auto",
-    th: {
-      maxv: 12.1,
-      minv: 10.1,
-    },
-    man: {
-      pitch: 20,
-      yaw: 30,
-    },
-  };
-  res.json(data);
-  console.log('Sent setting data', data);
+  
+  res.json(__data);
+  console.log('Sent setting data', __data);
 });
 
 app.listen(port, () => {

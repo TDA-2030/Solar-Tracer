@@ -9,9 +9,9 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'http://localhost:5000', // 替换为你的API服务器地址
+        target: 'http://192.168.4.1:80', // 替换为你的API服务器地址
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        rewrite: (path) => path.replace(/^\/api/, '/api/')
       }
     }
   }

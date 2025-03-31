@@ -2,12 +2,12 @@
   <v-container fluid>
     <v-row>
       <!-- 实时数据展示 -->
-      <v-col cols="12" md="5">
+      <v-col cols="12" md="5" v-for="(panel, name) in realtimeData" :key="name">
         <v-card>
-          <v-card-title>Current Status</v-card-title>
+          <v-card-title>{{name}}</v-card-title>
           <v-card-text>
             <v-row>
-              <v-col v-for="(value, key) in realtimeData" :key="key" cols="6">
+              <v-col v-for="(value, key) in panel" :key="key" cols="6">
                 <v-card variant="outlined">
                   <v-card-text class="text-center">
                     <div class="text-h6">{{ key }}</div>
@@ -46,13 +46,17 @@
       </v-col>
     </v-row>
   </v-container>
+  <v-footer color="primary" app fixed>
+      <span class="white--text">Local Time: {{ serverTime }}</span>
+  </v-footer>
 </template>
 
 <script setup>
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, ref } from 'vue'
 import { useSolarStore } from '../stores/solarStore'
 import { storeToRefs } from 'pinia'
 import axios from 'axios'
+import { formatTimestamp } from '../utils/typeConversion'
 
 const store = useSolarStore()
 const { realtimeData, accelerationData, angleData } = storeToRefs(store)
@@ -64,6 +68,8 @@ const axisName = [
   { name: 'Z', color: 'blue' }
 ]
 
+let serverTime = ref('00:00:00')
+
 // Expected data format:
 // {
 //   acceleration: { time: 'HH:mm:ss', x: number, y: number, z: number },
@@ -74,10 +80,9 @@ const fetchData = () => {
   axios.get('/api/v1/temp/raw')
     .then(response => {
       const data = response.data
-      store.updateAngles({
-        _angleData: data.angle,
-        _accelerationData: data.acc
-      })
+      store.updateRealData(data)
+      serverTime.value = formatTimestamp(data.panel.time)
+      delete data.panel.time // Remove time from panel data
     })
     .catch(error => {
       console.error('Error fetching data:', error)
@@ -89,6 +94,38 @@ let intervalId
 onMounted(() => {
   console.log('HomeView mounted')
   intervalId = setInterval(fetchData, 150)
+
+  // Get current location and time
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition((position) => {
+      const now = new Date()
+      const locationData = {
+        latitude: Number(position.coords.latitude),
+        longitude: Number(position.coords.longitude),
+        utctime: {
+          year: now.getUTCFullYear(),
+          month: now.getUTCMonth() + 1, // getUTCMonth() returns 0-11
+          day: now.getUTCDate(),
+          hours: now.getUTCHours(),
+          minutes: now.getUTCMinutes(),
+          seconds: now.getUTCSeconds()
+        }
+      }
+      
+      // Send location data to server
+      axios.post('/api/v1/location', locationData)
+        .then(response => {
+          console.log('Location data sent successfully:', response.data)
+        })
+        .catch(error => {
+          console.error('Error sending location data:', error)
+        })
+    }, (error) => {
+      console.error('Error getting location:', error)
+    })
+  } else {
+    console.error('Geolocation is not supported by this browser')
+  }
 })
 
 onUnmounted(() => {

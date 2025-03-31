@@ -5,47 +5,50 @@ export const useSolarStore = defineStore('solar', {
     angleData: Array(20).fill({ x: 0, y: 0, z: 0 }),
     accelerationData: Array(20).fill({ x: 0, y: 0, z: 0 }),
     realtimeData: {
-      azimuth: 45,
-      elevation: 30,
-      light: 850,
-      temperature: 28.5,
-      voltage: 24.3,
-      current: 5.2
-    },
-    controlData: {
-      mode: 'auto', // 'auto' or 'manual'
-      azimuth: 45,
-      elevation: 30,
-      angleDeviation: 5,
-      voltageMin: 20,
-      voltageMax: 30,
-      pos_pid: {
-        Kp: 0.1,
-        Ki: 0.01,
-        Kd: 0.01,
+      panel: {
+        azimuth: 45,
+        elevation: 30,
       },
-      vel_pid: {
-        Kp: 0.1,
-        Ki: 0.01,
-        Kd: 0.01,
-      }
+    },
+    controlData:
+    {
+      pid:{
+          pos:{
+              p:0.1,
+              i:0.1,
+              d:0.1,
+              maxout:100,
+              maxitg:100,
+          },
+      },
+      mode:"auto",
+      th:{
+          maxv:12.1,
+          minv:10.1,
+      },
+      man:{
+          pitch:20,
+          yaw:30,
+      },
+      yaw_offset:0,
     },
   }),
   actions: {
-    updateAngles(newValues) {
-      this.angleData.push(newValues._angleData)
+    updateRealData(newValues) {
+      this.angleData.push(newValues.angle)
       if (this.angleData.length > 20) {
         this.angleData.shift()
       }
 
-      this.accelerationData.push(newValues._accelerationData)
+      this.accelerationData.push(newValues.acc)
       if (this.accelerationData.length > 20) {
         this.accelerationData.shift()
       }
-      this.realtimeData.azimuth = newValues._angleData.x
-      this.realtimeData.elevation = newValues._angleData.y
+      delete newValues.angle
+      delete newValues.acc
+      this.realtimeData = { ...this.realtimeData, ...newValues };
     },
-    saveSettingData(newSet) {
+    updateSettingData(newSet) {
       this.controlData = newSet
     },
   },

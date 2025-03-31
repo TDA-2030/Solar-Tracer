@@ -24,12 +24,13 @@
 
 <script setup>
 import { ref } from 'vue'
+import { mdiHome, mdiChartLine, mdiController } from '@mdi/js'
 
 const drawer = ref(true)
 const navItems = [
-  { text: 'Home', icon: 'home', route: '/' },
-  { text: 'Control', icon: 'highlight', route: '/control' },
-  { text: 'Analysis', icon: 'show_chart', route: '/analysis' },
+  { text: 'Home', icon: mdiHome, route: '/' },
+  { text: 'Control', icon: mdiController, route: '/control' },
+  { text: 'Analysis', icon: mdiChartLine, route: '/analysis' },
 ]
 </script>
 

@@ -24,9 +24,9 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
     switch (event_id) {
     case GPS_UPDATE: {
         gps_t *gps = (gps_t *)event_data;
-        pgps->data = *gps;
         /* print information parsed from GPS statements */
         if (gps->valid) {
+            pgps->data = *gps;
             ESP_LOGI(TAG, "latitude:%.3f, longitude:%.3f, altitude:%.3f, speed:%.1f, sats_in_view:%d, UTC time:%d-%d-%d %d:%d:%d",
                      gps->latitude, gps->longitude, gps->altitude, gps->speed, gps->sats_in_view, gps->date.year + YEAR_BASE, gps->date.month, gps->date.day,
                      gps->tim.hour + TIME_ZONE, gps->tim.minute, gps->tim.second);

@@ -16,7 +16,8 @@
 
 enum {
   MODE_MANUAL = 0,
-  MODE_AUTO = 1
+  MODE_TOWARD = 1,
+  MODE_REFLECT = 2,
 };
 
 template <typename T>

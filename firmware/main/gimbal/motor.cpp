@@ -300,8 +300,3 @@ void Motor::run(float dt)
         break;
     }
 }
-
-void Motor::set_position(float position)
-{
-    this->target_position = position;
-}

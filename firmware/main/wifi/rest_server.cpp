@@ -240,8 +240,10 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
     if (mode) {
         if (strcmp(mode->valuestring, "manual") == 0) {
             g_settings.mode = MODE_MANUAL;
-        } else if (strcmp(mode->valuestring, "auto") == 0) {
-            g_settings.mode = MODE_AUTO;
+        } else if (strcmp(mode->valuestring, "toward") == 0) {
+            g_settings.mode = MODE_TOWARD;
+        } else if (strcmp(mode->valuestring, "reflect") == 0) {
+            g_settings.mode = MODE_REFLECT;
         }
     }
 
@@ -264,9 +266,7 @@ static esp_err_t setting_post_handler(httpd_req_t *req)
     if (man) {
         g_settings.target_pitch = cJSON_GetObjectItem(man, "pitch")->valuedouble;
         g_settings.target_yaw = cJSON_GetObjectItem(man, "yaw")->valuedouble;
-        if (g_settings.mode == MODE_MANUAL) {
-            gimbal.setTarget(g_settings.target_pitch, 0, g_settings.target_yaw);
-        }
+        gimbal.triger_task_immediate();
 
     }
 
@@ -326,7 +326,7 @@ static esp_err_t setting_get_handler(httpd_req_t *req)
     cJSON_AddItemToObject(root, "pid", pid);
 
     // 添加 mode
-    cJSON_AddStringToObject(root, "mode", g_settings.mode == MODE_MANUAL ? "manual" : "auto");
+    cJSON_AddStringToObject(root, "mode", g_settings.mode == MODE_MANUAL ? "manual" : (g_settings.mode == MODE_TOWARD ? "toward" : "reflect"));
 
     cjson_add_num_as_str(root, "yaw_offset", g_settings.yaw_offset);
 
@@ -492,8 +492,8 @@ static esp_err_t realtime_data_get_handler(httpd_req_t *req)
     cJSON_AddItemToObject(root, "angle", angle);
 
     cJSON *panel = cJSON_CreateObject();
-    cjson_add_num_as_str(panel, "Azimuth", gimbal.getYawTarget());
-    cjson_add_num_as_str(panel, "Elevation", gimbal.getPitchTarget());
+    cjson_add_num_as_str(panel, "SunAzimuth", gimbal.sunPosition.dAzimuth);
+    cjson_add_num_as_str(panel, "SunElevation", gimbal.sunPosition.dElevation);
     cjson_add_num_as_str(panel, "voltage", adc_read_voltage());
     cjson_add_num_as_str(panel, "temperature", gimbal.imu->getData().temperature);
     cjson_add_num_as_str(panel, "longtiude", gimbal.gps->getData().longitude);
@@ -506,7 +506,7 @@ static esp_err_t realtime_data_get_handler(httpd_req_t *req)
     cJSON *yawmotor = cJSON_CreateObject();
     cjson_add_num_as_str(yawmotor, "state", gimbal.yawMotor->get_state());
     cjson_add_num_as_str(yawmotor, "speed", gimbal.yawMotor->get_velocity());
-    cjson_add_num_as_str(yawmotor, "angle", gimbal.yawMotor->get_position()*360/gimbal.gearRatio);
+    cjson_add_num_as_str(yawmotor, "angle", gimbal.yawMotor->get_position());
     cJSON_AddItemToObject(root, "YawMotor", yawmotor);
 
     cJSON *pitchmotor = cJSON_CreateObject();

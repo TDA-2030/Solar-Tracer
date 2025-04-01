@@ -110,6 +110,10 @@ private:
 class Motor {
 public:
     Motor(const char *name);
+    Motor(const char *name, float gearRatio) : Motor(name)
+    {
+        this->gearRatio = gearRatio;
+    }
 
     // 禁止拷贝构造和赋值操作
     Motor(const Motor &) = delete;
@@ -120,7 +124,15 @@ public:
 
     void run(float dt); // 运行电机，周期调用
     void enable(bool is_enable);
-    void set_position(float position);
+    void set_position(float position)
+    {
+        this->target_position = position * gearRatio / 360.0f;
+    }
+
+    float get_position() 
+    {
+        return this->sensor->get_position() * 360.0f / gearRatio;
+    }
     void set_max_speed(float max_speed)
     {
         this->max_speed = max_speed;
@@ -132,11 +144,6 @@ public:
     mot_state_t get_state()
     {
         return this->state;
-    }
-
-    float get_position() 
-    {
-        return this->sensor->get_position();
     }
 
     float get_velocity()
@@ -159,6 +166,8 @@ private:
     uint32_t stall_cnt = 0;
     mot_state_t state; // 电机状态
     float max_speed; // 最大速度
+    float gearRatio = 1.0f; // 齿轮比, default 1
+
 };
 
 #ifdef __cplusplus

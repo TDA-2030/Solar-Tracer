@@ -13,7 +13,6 @@
 #include "freertos/semphr.h"
 #include "observer.hpp"
 #include "imu_bmi270.h"
-#include "qmc5883p.h"
 #include "motor.h"
 #include "pid.h"
 #include "gps.h"
@@ -49,7 +48,6 @@ public:
     void getSunPosition(cSunCoordinates *sunCoordinates);
     void triger_task_immediate();
     std::shared_ptr<IMUBmi270> imu;
-    std::shared_ptr<AP_Compass_QMC5883P> compass;
     std::shared_ptr<GPS> gps;
     struct pid pitchPID;
     std::shared_ptr<Motor> pitchMotor;

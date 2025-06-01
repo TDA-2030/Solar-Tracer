@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "imu_bmi270.h"
 #include "board.h"
+#include "setting.h"
 
 #include "app_datafusion.h"
 #include "common/common.h"
@@ -127,6 +128,10 @@ void IMUBmi270::readData()
     rslt = bmi2_get_sensor_data(&sensor_data, bmi2_dev);
     bmi2_error_codes_print_result(rslt);
     _data.temperature = readTemperature();
+    static uint32_t compass_cnt = 0;
+    if (compass_cnt++ % 10 == 0) {
+        globalInstance->compass->read();
+    }
 
     if ((rslt == BMI2_OK) && (sensor_data.status & BMI2_DRDY_ACC) && (sensor_data.status & BMI2_DRDY_GYR)) {
         /* Converting lsb to meter per second squared for 16 bit accelerometer at 2G range. */
@@ -139,6 +144,7 @@ void IMUBmi270::readData()
         _data.gyro.y = lsb_to_dps(sensor_data.gyr.y, (float)2000, bmi2_dev->resolution);
         _data.gyro.z = lsb_to_dps(sensor_data.gyr.z, (float)2000, bmi2_dev->resolution);
         calculateAttitude(&_data, 0.01f);
+        _data.angle.z = compass->getAzimuth();
         notifyObservers(_data);
     } else {
         ESP_LOGW(TAG, "Sensor data not ready");
@@ -158,7 +164,7 @@ static void imu_task(void *arg)
 int IMUBmi270::init()
 {
 
-    i2c_bus_handle_t i2c_bus_handle = bsp_i2c_get_handle();
+    i2c_bus_handle_t i2c_bus_handle = bsp_i2c_get_handle(0);
     if (!i2c_bus_handle) {
         ESP_LOGE(TAG, "Failed to get i2c bus handle");
         return -1;
@@ -166,7 +172,7 @@ int IMUBmi270::init()
 
     bmi270_i2c_config_t i2c_bmi270_conf = {
         .i2c_handle = i2c_bus_handle,
-        .i2c_addr = BMI270_I2C_ADDRESS,
+        .i2c_addr = 0x69,
     };
 
     esp_err_t ret = bmi270_sensor_create(&i2c_bmi270_conf, &bmi_handle);
@@ -176,6 +182,9 @@ int IMUBmi270::init()
     }
     globalInstance = this;
     bmi270_enable_accel_gyro(bmi_handle);
+
+    this->compass = std::make_shared<AP_Compass_QMC5883P>();
+    this->compass->setMagneticDeclination(g_settings.magnetic_declination_degrees);
 
     BaseType_t res;
     res = xTaskCreate(imu_task, "imu_task", 4096, NULL, configMAX_PRIORITIES - 1, &imuTaskHandle);

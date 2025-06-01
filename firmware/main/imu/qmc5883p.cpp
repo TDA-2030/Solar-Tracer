@@ -15,13 +15,16 @@
  * Driver by Lokesh Ramina, Jan 2022
  */
 #include <stdio.h>
+#include <math.h>
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "qmc5883p.h"
 #include "board.h"
 
 static const char *TAG = "qmc5883p";
 
-#if 1
+#define PI         3.1415926535897932384626433832795
+
 #define HAL_COMPASS_QMC5883P_I2C_ADDR 0x2C
 
 //Register Address
@@ -69,53 +72,54 @@ static const char *TAG = "qmc5883p";
 
 //Status Val
 #define QMC5883P_STATUS_DATA_READY 0x01
+#define QMC5883P_STATUS_DATA_OVFL 0x02
 
 #ifndef DEBUG
-#define DEBUG 1
+#define DEBUG 0
 #endif
 
 
 int AP_Compass_QMC5883P::write_register(  int reg, uint8_t value )
 {
     esp_err_t ret = i2c_bus_write_bytes(i2c_device, reg, 1, &value);
-    return 1 ? ret == ESP_OK : 0;
+    return ret == ESP_OK ? 0 : 1;
 }
 
 int AP_Compass_QMC5883P::read_registers(int reg, uint8_t *buffer, int count )
 {
     esp_err_t ret = i2c_bus_read_bytes(i2c_device, reg, count, buffer);
-
-    return 1 ? ret == ESP_OK : 0;
+    return ret == ESP_OK ? 0 : 1;
 }
 
 AP_Compass_QMC5883P::AP_Compass_QMC5883P()
 {
-
-    i2c_bus_handle_t i2c0_bus = bsp_i2c_get_handle();
-    if (!i2c0_bus) {
+    int ret=0;
+    i2c_bus_handle_t i2c_bus = bsp_i2c_get_handle(1);
+    if (!i2c_bus) {
         ESP_LOGE(TAG, "Failed to get i2c bus handle");
         return ;
     }
 
-    i2c_device = i2c_bus_device_create(i2c0_bus, HAL_COMPASS_QMC5883P_I2C_ADDR, 0);
+    i2c_device = i2c_bus_device_create(i2c_bus, HAL_COMPASS_QMC5883P_I2C_ADDR, 0);
+    if (!_check_whoami()) {
+        ESP_LOGE(TAG, "QMC5883P not found");
+        goto fail;
+    }
+
+    ret |= write_register(QMC5883P_REG_CONF1,
+                            QMC5883P_MODE_CONTINUOUS |
+                            QMC5883P_ODR_100HZ |
+                            QMC5883P_OSR1_8 |
+                            QMC5883P_OSR2_8);
+    ret |= write_register( QMC5883P_REG_CONF2, QMC5883P_RNG_12G );
+    if (ret) {
+        ESP_LOGE(TAG, "QMC5883P init failed");
+        goto fail;
+    }
 
 #if DEBUG
     _dump_registers();
 #endif
-    if (!_check_whoami()) {
-        goto fail;
-    }
-    //As mentioned in the Datasheet 7.2 to do continues mode 0x29 will set sign for X,Y,Z
-    if (!write_register(QMC5883P_REG_DATA_OUTPUT_Z_MSB, QMC5883P_SET_XYZ_SIGN) ||
-            !write_register(QMC5883P_REG_CONF1,
-                            QMC5883P_MODE_CONTINUOUS |
-                            QMC5883P_ODR_100HZ |
-                            QMC5883P_OSR1_8 |
-                            QMC5883P_OSR2_8) ||
-            !write_register(QMC5883P_REG_CONF2, QMC5883P_OSR2_8)) {
-        goto fail;
-    }
-
 
 fail:
     return ;
@@ -123,13 +127,110 @@ fail:
 
 bool AP_Compass_QMC5883P::_check_whoami()
 {
-    uint8_t whoami;
+    uint8_t whoami=0;
     read_registers(QMC5883P_REG_ID, &whoami, 1);
     if (whoami != QMC5883P_ID_VAL) {
-        printf("whoami:%02x\n", (unsigned)whoami);
+        ESP_LOGE(TAG, "whoami:0x%02x\n", (unsigned)whoami);
         return false;
     }
     return true;
+}
+
+/**
+ * Define the magnetic declination for accurate degrees.
+ * https://www.magnetic-declination.com/
+ * 
+ * @example
+ * For: Londrina, PR, Brazil at date 2022-12-05
+ * The magnetic declination is: -19º 43'
+ * 
+ * then: setMagneticDeclination(-19, 43);
+ */
+void AP_Compass_QMC5883P::setMagneticDeclination(int degrees, uint8_t minutes)
+{
+	_magneticDeclinationDegrees = (float)degrees + (float)minutes / 60.0f;
+}
+
+void AP_Compass_QMC5883P::_applyCalibration()
+{
+	_vCalibrated.x = (_vRaw.x - _offset.x) * _scale.x;
+	_vCalibrated.y = (_vRaw.y - _offset.y) * _scale.y;
+	_vCalibrated.z = (_vRaw.z - _offset.z) * _scale.z;
+}
+
+void AP_Compass_QMC5883P::calibrate() {
+	clearCalibration();
+	int32_t calibrationData[3][2] = {{65000, -65000}, {65000, -65000}, {65000, -65000}};
+  	int32_t	x, y, z;
+
+	uint64_t end_time = esp_timer_get_time() + 10000000; // 10 seconds later
+	while(esp_timer_get_time() < end_time) {
+		read();
+
+  		x = _vRaw.x;
+  		y = _vRaw.y;
+  		z = _vRaw.z;
+
+		if(x < calibrationData[0][0]) {
+			calibrationData[0][0] = x;
+		}
+		if(x > calibrationData[0][1]) {
+			calibrationData[0][1] = x;
+		}
+
+		if(y < calibrationData[1][0]) {
+			calibrationData[1][0] = y;
+		}
+		if(y > calibrationData[1][1]) {
+			calibrationData[1][1] = y;
+		}
+
+		if(z < calibrationData[2][0]) {
+			calibrationData[2][0] = z;
+		}
+		if(z > calibrationData[2][1]) {
+			calibrationData[2][1] = z;
+		}
+	}
+
+	setCalibration(
+		calibrationData[0][0],
+		calibrationData[0][1],
+		calibrationData[1][0],
+		calibrationData[1][1],
+		calibrationData[2][0],
+		calibrationData[2][1]
+	);
+}
+
+/**
+    SET CALIBRATION
+	Set calibration values for more accurate readings
+		
+	@author Claus Näveke - TheNitek [https://github.com/TheNitek]
+	
+	@since v1.1.0
+
+	@deprecated Instead of setCalibration, use the calibration offset and scale methods.
+**/
+void AP_Compass_QMC5883P::setCalibration(int x_min, int x_max, int y_min, int y_max, int z_min, int z_max){
+	setCalibrationOffsets(
+		(x_min + x_max)/2,
+		(y_min + y_max)/2,
+		(z_min + z_max)/2
+	);
+
+	float x_avg_delta = (x_max - x_min)/2;
+	float y_avg_delta = (y_max - y_min)/2;
+	float z_avg_delta = (z_max - z_min)/2;
+
+	float avg_delta = (x_avg_delta + y_avg_delta + z_avg_delta) / 3;
+
+	setCalibrationScales(
+		avg_delta / x_avg_delta,
+		avg_delta / y_avg_delta,
+		avg_delta / z_avg_delta
+	);
 }
 
 void AP_Compass_QMC5883P::read()
@@ -138,50 +239,57 @@ void AP_Compass_QMC5883P::read()
         int16_t rx;
         int16_t ry;
         int16_t rz;
-    } buffer;
-
-    const float range_scale = 1000.0f / 3000.0f;
+    };
+    struct PACKED buffer;
 
     uint8_t status;
-    if (!read_registers(QMC5883P_REG_STATUS, &status, 1)) {
+    if (read_registers(QMC5883P_REG_STATUS, &status, 1)) {
         return;
     }
     //new data is ready
     if (!(status & QMC5883P_STATUS_DATA_READY)) {
-        printf("no data ready\n");
+        ESP_LOGW(TAG, "no data ready");
         return;
     }
+    if (status & QMC5883P_STATUS_DATA_OVFL) {
+        ESP_LOGW(TAG, "data overflow");
+    }
 
-    if (!read_registers(QMC5883P_REG_DATA_OUTPUT_X, (uint8_t *) &buffer, sizeof(buffer))) {
+    if (read_registers(QMC5883P_REG_DATA_OUTPUT_X, (uint8_t *)&buffer, sizeof(buffer))) {
         return ;
     }
 
-    auto x = buffer.rx;
-    auto y = buffer.ry;
-    auto z = buffer.rz;
+    #define FACTOR 24 / 600 // convert to uT in ±12G range
+    _vRaw.x  = (float)buffer.rx * FACTOR;
+    _vRaw.y = (float)buffer.ry * FACTOR;
+    _vRaw.z = (float)buffer.rz * FACTOR;
+    _applyCalibration();
+    #undef FACTOR
 
 #if DEBUG
-    printf("mag:%d, %d, %d\n", x, y, z);
+    printf("mag:%.2f, %.2f, %.2f\n", _vRaw.x, _vRaw.y, _vRaw.z);
 #endif
-
-    // Vector3f field = Vector3f{x * range_scale, y * range_scale, z * range_scale };
-
-    // accumulate_sample(field, _instance, 20);
 }
 
-
+int AP_Compass_QMC5883P::getAzimuth()
+{
+	float heading = atan2( _vRaw.y, _vRaw.x ) * 180.0 / PI;
+	heading += _magneticDeclinationDegrees;
+    heading = fmod(heading + 540, 360) - 180;  // 标准化到 -180 到 +180
+	return (int)heading;
+}
 
 void AP_Compass_QMC5883P::_dump_registers()
 {
     printf("QMC5883P registers dump\n");
-    for (uint8_t reg = QMC5883P_REG_DATA_OUTPUT_X; reg <= 0x30; reg++) {
+    const uint8_t start_reg = 0x00;
+    for (uint8_t reg = start_reg; reg <= 0x30; reg++) {
         uint8_t v;
         read_registers(reg, &v, 1);
         printf("%02x:%02x ", (unsigned)reg, (unsigned)v);
-        if ((reg - ( QMC5883P_REG_DATA_OUTPUT_X - 1)) % 16 == 0) {
+        if ((reg - ( start_reg - 1)) % 16 == 0) {
             printf("\n");
         }
     }
+    printf("\n");
 }
-
-#endif //AP_COMPASS_QMC5883P_ENABLED

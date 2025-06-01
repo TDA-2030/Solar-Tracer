@@ -84,12 +84,11 @@ void Gimbal::init()
         ESP_LOGW(TAG, "IMU init failed, retrying");
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
-    this->compass = std::make_shared<AP_Compass_QMC5883P>();
+
     this->pitchMotor = std::make_shared<Motor>("pitch", 360.0f);
     this->yawMotor = std::make_shared<Motor>("yaw", 3000.0f);
-    static EncoderSensor encoderx, encodery;
+    static EncoderSensor encoderx;
     encoderx.init(BOARD_IO_MOTX_ENC_A, BOARD_IO_MOTX_ENC_B, 4 * 11);
-    encodery.init(BOARD_IO_MOTY_ENC_A, BOARD_IO_MOTY_ENC_B, 4 * 11);
     static IMUMotSensor imusensory;
     imusensory.init(this->imu.get()); // TODO save the params first
 
@@ -152,7 +151,6 @@ void Gimbal::update(const imu_data_t &data)
     float dt = (float)(_time - last_time) / 1000000.0f;
     last_time = _time;
 
-    // compass->read();
 
     // printf("angle: %f %f %f\n", data.angle.x, data.angle.y, data.angle.z);
     // printf("gyro: %f %f %f\n", data.gyro.x, data.gyro.y, data.gyro.z);

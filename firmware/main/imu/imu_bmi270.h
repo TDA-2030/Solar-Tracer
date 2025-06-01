@@ -8,6 +8,7 @@
 
 #include "imu_base.h"
 #include "bmi270.h"
+#include "qmc5883p.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
@@ -31,6 +32,7 @@ public:
     void readData();
 private:
     bmi270_handle_t bmi_handle;
+    std::shared_ptr<AP_Compass_QMC5883P> compass;
 
     TaskHandle_t imuTaskHandle;
 

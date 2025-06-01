@@ -34,7 +34,7 @@ extern "C" {
 
 
 esp_err_t bsp_i2c_init(void);
-i2c_bus_handle_t bsp_i2c_get_handle(void);
+i2c_bus_handle_t bsp_i2c_get_handle(int index);
 
 
 #ifdef __cplusplus

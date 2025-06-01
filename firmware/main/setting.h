@@ -105,6 +105,7 @@ public:
     float target_yaw;
 
     float yaw_offset; // degrees
+    float magnetic_declination_degrees;
 
 private:
     // std::unordered_map<std::string, Parameter> parameters; // 存储所有参数

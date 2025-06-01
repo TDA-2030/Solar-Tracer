@@ -21,6 +21,7 @@ void Setting::restortDefault()
     target_pitch = 0;
     target_yaw = 0;
     yaw_offset = 0;
+    magnetic_declination_degrees = 25.0f; // degrees
     pos_pid.p = 112;
     pos_pid.i = 700;
     pos_pid.d = 0;

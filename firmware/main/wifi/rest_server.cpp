@@ -13,18 +13,22 @@
 #include "esp_random.h"
 #include "esp_log.h"
 #include "esp_vfs.h"
+#include "esp_ota_ops.h"
+#include "esp_app_format.h"
+#include "esp_flash_partitions.h"
+#include "esp_partition.h"
 #include "cJSON.h"
 #include "rest_server.h"
 #include "setting.h"
 #include "adc.h"
 
-static const char *REST_TAG = "esp-rest";
+static const char *TAG = "esp-rest";
 #define REST_CHECK(a, str, goto_tag, ...)                                              \
     do                                                                                 \
     {                                                                                  \
         if (!(a))                                                                      \
         {                                                                              \
-            ESP_LOGE(REST_TAG, "%s(%d): " str, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
+            ESP_LOGE(TAG, "%s(%d): " str, __FUNCTION__, __LINE__, ##__VA_ARGS__); \
             goto goto_tag;                                                             \
         }                                                                              \
     } while (0)
@@ -73,7 +77,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     }
     int fd = open(filepath, O_RDONLY, 0);
     if (fd == -1) {
-        ESP_LOGE(REST_TAG, "Failed to open file : %s", filepath);
+        ESP_LOGE(TAG, "Failed to open file : %s", filepath);
         /* Respond with 500 Internal Server Error */
         httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to read existing file");
         return ESP_FAIL;
@@ -87,12 +91,12 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
         /* Read file in chunks into the scratch buffer */
         read_bytes = read(fd, chunk, SCRATCH_BUFSIZE);
         if (read_bytes == -1) {
-            ESP_LOGE(REST_TAG, "Failed to read file : %s", filepath);
+            ESP_LOGE(TAG, "Failed to read file : %s", filepath);
         } else if (read_bytes > 0) {
             /* Send the buffer contents as HTTP response chunk */
             if (httpd_resp_send_chunk(req, chunk, read_bytes) != ESP_OK) {
                 close(fd);
-                ESP_LOGE(REST_TAG, "File sending failed!");
+                ESP_LOGE(TAG, "File sending failed!");
                 /* Abort sending file */
                 httpd_resp_sendstr_chunk(req, NULL);
                 /* Respond with 500 Internal Server Error */
@@ -103,7 +107,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
     } while (read_bytes > 0);
     /* Close file after sending complete */
     close(fd);
-    ESP_LOGI(REST_TAG, "File %s sending complete", filepath);
+    ESP_LOGI(TAG, "File %s sending complete", filepath);
     /* Respond with an empty chunk to signal HTTP response completion */
     httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
@@ -120,15 +124,203 @@ static double cjson_get_num(cJSON *obj, const char *name)
 {
     cJSON *item = cJSON_GetObjectItem(obj, name);
     if (!item) {
-        ESP_LOGE(REST_TAG, "Error: %s not found in JSON", name);
+        ESP_LOGE(TAG, "Error: %s not found in JSON", name);
         return 0.0;
     }
 
     if (!cJSON_IsNumber(item)) {
-        ESP_LOGE(REST_TAG, "Error: %s is not a number", name);
+        ESP_LOGE(TAG, "Error: %s is not a number", name);
         return 0.0;
     }
     return item->valuedouble;
+}
+
+static esp_err_t firmware_update_post_handler(httpd_req_t *req)
+{
+    esp_err_t err;
+    const char *ret_msg = NULL;
+    /* update handle : set by esp_ota_begin(), must be freed via esp_ota_end() */
+    esp_ota_handle_t update_handle = 0 ;
+    const esp_partition_t *update_partition = NULL;
+    const esp_partition_t *configured = esp_ota_get_boot_partition();
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    char *ota_write_data = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int total_len = req->content_len;
+    int cur_len = 0;
+    const size_t chunk_size = 2048;
+    int binary_file_length = 0;
+    /*deal with all receive packet*/
+    bool image_header_was_checked = false;
+
+    if (configured != running) {
+        ESP_LOGW(TAG, "Configured OTA boot partition at offset 0x%08" PRIx32 ", but running from offset 0x%08" PRIx32 ,
+                 configured->address, running->address);
+        ESP_LOGW(TAG, "(This can happen if either the OTA boot data or preferred boot image become corrupted somehow.)");
+    }
+    ESP_LOGI(TAG, "Running partition %s type %d subtype %d (offset 0x%08" PRIx32 ")",
+             running->label, running->type, running->subtype, running->address);
+
+    update_partition = esp_ota_get_next_update_partition(NULL);
+    if (update_partition == NULL) {
+        ESP_LOGE(TAG, "No partition found for OTA");
+        ret_msg = "No partition found for OTA";
+        goto fail;
+    }
+    ESP_LOGI(TAG, "Writing to partition %s subtype %d at offset 0x%" PRIx32 ,
+             update_partition->label, update_partition->subtype, update_partition->address);
+    
+    while (cur_len < total_len) {
+        int data_read = httpd_req_recv(req, ota_write_data, chunk_size);
+        if (data_read <= 0) {
+            ESP_LOGE(TAG, "Error: data read error(%d)", data_read);
+            ret_msg = "Data read error";
+            goto fail;
+        }
+        cur_len += data_read;
+        {
+            if (image_header_was_checked == false) {
+                esp_app_desc_t new_app_info;
+                if (data_read > sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t) + sizeof(esp_app_desc_t)) {
+                    // check current version with downloading
+                    memcpy(&new_app_info, &ota_write_data[sizeof(esp_image_header_t) + sizeof(esp_image_segment_header_t)], sizeof(esp_app_desc_t));
+                    ESP_LOGI(TAG, "New firmware version: %s", new_app_info.version);
+
+                    esp_app_desc_t running_app_info;
+                    if (esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
+                        ESP_LOGI(TAG, "Running firmware version: %s", running_app_info.version);
+                    }
+
+                    const esp_partition_t* last_invalid_app = esp_ota_get_last_invalid_partition();
+                    esp_app_desc_t invalid_app_info;
+                    if (esp_ota_get_partition_description(last_invalid_app, &invalid_app_info) == ESP_OK) {
+                        ESP_LOGI(TAG, "Last invalid firmware version: %s", invalid_app_info.version);
+                    }
+
+                    // check current version with last invalid partition
+                    if (last_invalid_app != NULL) {
+                        if (memcmp(invalid_app_info.version, new_app_info.version, sizeof(new_app_info.version)) == 0) {
+                            ESP_LOGW(TAG, "New version is the same as invalid version.");
+                            ESP_LOGW(TAG, "Previously, there was an attempt to launch the firmware with %s version, but it failed.", invalid_app_info.version);
+                            ESP_LOGW(TAG, "The firmware has been rolled back to the previous version.");
+                            ret_msg = "New version is the same as invalid version";
+                            goto fail;
+                        }
+                    }
+
+                    image_header_was_checked = true;
+
+                    err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES, &update_handle);
+                    if (err != ESP_OK) {
+                        ESP_LOGE(TAG, "esp_ota_begin failed (%s)", esp_err_to_name(err));
+                        esp_ota_abort(update_handle);
+                        ret_msg = "esp_ota_begin failed";
+                        goto fail;
+                    }
+                    ESP_LOGI(TAG, "esp_ota_begin succeeded");
+                } else {
+                    ESP_LOGE(TAG, "received package is not fit len");
+                    esp_ota_abort(update_handle);
+                    ret_msg = "Received package is not fit length";
+                    goto fail;
+                }
+            }
+            err = esp_ota_write( update_handle, (const void *)ota_write_data, data_read);
+            if (err != ESP_OK) {
+                esp_ota_abort(update_handle);
+                ret_msg = "esp_ota_write failed";
+                goto fail;
+            }
+            binary_file_length += data_read;
+            ESP_LOGI(TAG, "Written image length %d", binary_file_length);
+            vTaskDelay(pdMS_TO_TICKS(5));
+        }
+    }
+    ESP_LOGI(TAG, "Total Write binary data length: %d", binary_file_length);
+
+    err = esp_ota_end(update_handle);
+    if (err != ESP_OK) {
+        if (err == ESP_ERR_OTA_VALIDATE_FAILED) {
+            ESP_LOGE(TAG, "Image validation failed, image is corrupted");
+        } else {
+            ESP_LOGE(TAG, "esp_ota_end failed (%s)!", esp_err_to_name(err));
+        }
+        ret_msg = "esp_ota_end failed";
+        goto fail;
+    }
+
+    err = esp_ota_set_boot_partition(update_partition);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "esp_ota_set_boot_partition failed (%s)!", esp_err_to_name(err));
+        ret_msg = "esp_ota_set_boot_partition failed";
+        goto fail;
+    }
+
+    httpd_resp_sendstr(req, "Post firmware successfully");
+    vTaskDelay(pdMS_TO_TICKS(1000)); // Give some time for the response to be sent before restarting
+    ESP_LOGI(TAG, "Prepare to restart system!");
+    esp_restart();
+    return ESP_OK;
+
+fail:
+    /* Respond with 500 Internal Server Error */
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, ret_msg);
+    return ESP_FAIL;
+}
+
+
+static esp_err_t webdata_update_post_handler(httpd_req_t *req)
+{
+    #define ROUND_UP_TO_MULTIPLE(value, multiple) (((value) + (multiple) - 1) / (multiple) * (multiple))
+    const char *ret_msg = NULL;
+    char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+    int total_len = req->content_len;
+    int cur_len = 0;
+    const size_t chunk_size = 2048;
+    const esp_partition_t *update_partition = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "www");
+    if (update_partition == NULL) {
+        ESP_LOGE(TAG, "Failed to find spiffs partition");
+        ret_msg = "Failed to find spiffs partition";
+        goto fail;
+    }
+    if (update_partition->size < req->content_len) {
+        ESP_LOGE(TAG, "Spiffs partition size is too small for the data to be written");
+        ret_msg = "Spiffs partition size is too small for the data to be written";
+        goto fail;
+    }
+
+    if (esp_partition_erase_range(update_partition, 0, ROUND_UP_TO_MULTIPLE(req->content_len, update_partition->erase_size)) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to erase spiffs partition");
+        ret_msg = "Failed to erase spiffs partition";
+        goto fail;
+    }
+    #undef ROUND_UP_TO_MULTIPLE
+    
+    while (cur_len < total_len) {
+        int data_read = httpd_req_recv(req, buf, chunk_size);
+        if (data_read <= 0) {
+            ESP_LOGE(TAG, "Error: data read error(%d)", data_read);
+            ret_msg = "Data read error";
+            goto fail;
+        }
+        {
+            if (esp_partition_write(update_partition, cur_len, buf, data_read) != ESP_OK) {
+                ESP_LOGE(TAG, "Failed to write data to spiffs partition");
+                ret_msg = "Failed to write data to spiffs partition";
+                goto fail;
+            }
+        }
+        cur_len += data_read;
+        ESP_LOGI(TAG, "Written data length %d", cur_len);
+        vTaskDelay(pdMS_TO_TICKS(5));
+    }
+
+    httpd_resp_sendstr(req, "Post webdata successfully");
+    return ESP_OK;
+
+fail:
+    /* Respond with 500 Internal Server Error */
+    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, ret_msg);
+    return ESP_FAIL;
 }
 
 /* json format of setting */
@@ -561,12 +753,14 @@ esp_err_t WebServer::start()
     config = HTTPD_DEFAULT_CONFIG();
     config.uri_match_fn = httpd_uri_match_wildcard;
 
-    ESP_LOGI(REST_TAG, "Starting HTTP Server");
+    ESP_LOGI(TAG, "Starting HTTP Server");
     REST_CHECK(httpd_start(&server, &config) == ESP_OK, "Start server failed", err_start);
 
     on("/api/v1/sysinfo", HTTP_GET, system_info_get_handler, rest_context);
     on("/api/v1/setting", HTTP_GET, setting_get_handler, rest_context);
     on("/api/v1/setting", HTTP_POST, setting_post_handler, rest_context);
+    on("/api/v1/firmware/update", HTTP_POST, firmware_update_post_handler, rest_context);
+    on("/api/v1/webdata/update", HTTP_POST, webdata_update_post_handler, rest_context);
     on("/api/v1/sysctrl", HTTP_POST, sysctrl_post_handler, rest_context);
     on("/api/v1/location", HTTP_POST, location_post_handler, rest_context);
     on("/api/v1/temp/raw", HTTP_GET, realtime_data_get_handler, rest_context);
@@ -582,6 +776,6 @@ err:
 
 esp_err_t WebServer::stop()
 {
-    ESP_LOGW(REST_TAG, "Stopping HTTP Server");
+    ESP_LOGW(TAG, "Stopping HTTP Server");
     return httpd_stop(server);
 }

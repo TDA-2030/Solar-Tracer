@@ -3,6 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_ota_ops.h"
 #include "nvs_flash.h"
 #include "helper.h"
 #include "nmea_parser.h"
@@ -27,6 +28,10 @@ extern "C" void app_main()
         err = nvs_flash_init();
     }
     ESP_ERROR_CHECK( err );
+
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    ESP_LOGI(TAG, "Running partition %s type %d subtype %d (offset 0x%08"PRIx32")",
+             running->label, running->type, running->subtype, running->address);
 
     led_init();
     g_settings.load();

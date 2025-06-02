@@ -65,6 +65,67 @@
         </v-card>
       </v-col>
 
+      <!-- 固件升级 -->
+      <v-col cols="12" md="6">
+        <v-card>
+          <v-card-title>Firmware Update</v-card-title>
+          <v-card-text>
+            <!-- System Info -->
+            <v-list density="compact" class="mb-4 system-info-list">
+              <v-list-item>
+                <v-list-item-title class="font-weight-medium">System Information</v-list-item-title>
+              </v-list-item>
+              <v-list-item v-for="(value, key) in sysInfo" :key="key" class="system-info-item">
+                <v-list-item-title class="d-flex align-center py-1">
+                  <span class="text-caption mr-2" style="min-width: 120px">{{ key }}:</span>
+                  <span class="text-body-2">{{ value }}</span>
+                </v-list-item-title>
+              </v-list-item>
+            </v-list>
+
+            <v-divider class="mb-4"></v-divider>
+
+            <v-file-input
+              v-model="firmwareFile"
+              label="Select Firmware File"
+              accept=".bin"
+              :loading="firewareuploading"
+              show-size
+              variant="outlined"
+            ></v-file-input>
+            <v-btn
+              color="primary"
+              block
+              :loading="firewareuploading"
+              :disabled="!firmwareFile"
+              @click="uploadFile('firmware')"
+            >
+              Update Firmware
+            </v-btn>
+
+            <v-divider class="mb-4"></v-divider>
+
+            <v-file-input
+              v-model="webFile"
+              label="Select Webdata File"
+              accept=".bin"
+              :loading="webdatauploading"
+              show-size
+              variant="outlined"
+            ></v-file-input>
+            <v-btn
+              color="primary"
+              block
+              :loading="webdatauploading"
+              :disabled="!webFile"
+              @click="uploadFile('webdata')"
+            >
+              Update Webdata
+            </v-btn>
+          </v-card-text>
+        </v-card>
+      </v-col>
+
     </v-row>
   </v-container>
 </template>
@@ -95,6 +156,49 @@ const voltageRange = computed({
   }
 })
 
+const firmwareFile = ref(null)
+const webFile = ref(null)
+const firewareuploading = ref(false)
+const webdatauploading = ref(false)
+const sysInfo = ref({})
+
+const uploadFile = async (type) => {
+  const file = type === 'firmware' ? firmwareFile.value : webFile.value
+  const uploadingRef = type === 'firmware' ? firewareuploading : webdatauploading
+  const endpoint = type === 'firmware' ? '/api/v1/firmware/update' : '/api/v1/webdata/update'
+  
+  if (!file) return
+
+  try {
+    uploadingRef.value = true
+
+    await axios.post(endpoint, file, {
+      headers: {
+        'Content-Type': 'application/octet-stream'
+      },
+      onUploadProgress: (progressEvent) => {
+        const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total)
+        console.log('Upload progress:', percentCompleted)
+      }
+    })
+
+    alert(`${type.charAt(0).toUpperCase() + type.slice(1)} uploaded successfully!`)
+    if (type === 'firmware') {
+      firmwareFile.value = null
+    } else {
+      webFile.value = null
+    }
+  } catch (error) {
+    console.error(`Error uploading ${type}:`, error)
+    const errorMessage = error.response 
+      ? `Error: ${error.response.status} - ${error.response.data}` 
+      : `Error: ${error.message}`
+    alert(`Failed to upload ${type}. Please try again.\n` + errorMessage)
+  } finally {
+    uploadingRef.value = false
+  }
+}
+
 const pid_param_max = ref({
     pos: { p: 1000, i: 1000, d: 10, maxout: 1000, maxitg: 1000 },
     vel: { p: 30, i: 100, d: 10, maxout: 1000, maxitg: 1000 },
@@ -105,7 +209,17 @@ const pid_param_max = ref({
 onMounted(() => {
   console.log('ControlView mounted')
   readSettingData()
+  fetchSystemInfo()
 })
+
+const fetchSystemInfo = async () => {
+  try {
+    const response = await axios.get('/api/v1/sysinfo')
+    sysInfo.value = response.data
+  } catch (error) {
+    console.error('Error fetching system info:', error)
+  }
+}
 
 const sendSettingData = () => {
   const _data = convertToNumbers(controlData.value);
@@ -142,3 +256,19 @@ const restartServer = () => {
   }
 }
 </script>
+
+<style scoped>
+.system-info-list {
+  border: 1px solid #e0e0e0;
+  border-radius: 4px;
+}
+
+.system-info-item {
+  border-top: 1px solid #e0e0e0;
+  min-height: 36px !important;
+}
+
+.system-info-item:first-child {
+  border-top: none;
+}
+</style>

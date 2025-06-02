@@ -139,7 +139,7 @@ void Gimbal::init()
 void Gimbal::update(const imu_data_t &data)
 {
     static int count = 0;
-    if (count++ % 100 == 0) {
+    if (count++ % 500 == 0) {
         static uint64_t _lt = 0;
         uint64_t start_time = esp_timer_get_time(); // 获取开始时间（微秒级）
         ESP_LOGI(TAG, "Gimbal updating %d", (int)((start_time - _lt) / 1000));

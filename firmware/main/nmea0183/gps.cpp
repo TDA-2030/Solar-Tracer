@@ -15,7 +15,7 @@ static const char *TAG = "GPS";
  * @param event_id event id
  * @param event_data event specific arguments
  */
-static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
+void gps_event_handler(void *event_handler_arg, esp_event_base_t event_base, int32_t event_id, void *event_data)
 {
 #define TIME_ZONE (+8)   //Beijing Time
 #define YEAR_BASE (2000) //date in GPS starts from 2000
@@ -32,7 +32,7 @@ static void gps_event_handler(void *event_handler_arg, esp_event_base_t event_ba
                      gps->tim.hour + TIME_ZONE, gps->tim.minute, gps->tim.second);
             pgps->notifyObservers(*gps);
         } else {
-            ESP_LOGW(TAG, "invalid GPS data");
+            ESP_LOGD(TAG, "invalid GPS data");
         }
 
     } break;

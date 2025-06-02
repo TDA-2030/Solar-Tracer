@@ -61,6 +61,7 @@ void Setting::print()
     ESP_LOGI(TAG, "vol_min: %f", vol_min);
     ESP_LOGI(TAG, "target_pitch: %f", target_pitch);
     ESP_LOGI(TAG, "target_yaw: %f", target_yaw);
+    ESP_LOGI(TAG, "magnetic_declination_degrees: %f", magnetic_declination_degrees);
     ESP_LOGI(TAG, "yaw_offset: %f", yaw_offset);
     ESP_LOGI(TAG, "pos_pid.p: %f", pos_pid.p);
     ESP_LOGI(TAG, "pos_pid.i: %f", pos_pid.i);

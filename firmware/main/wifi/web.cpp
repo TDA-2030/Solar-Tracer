@@ -192,7 +192,7 @@ void start_web(void)
     wifi_init_softap();
 
     // ESP_ERROR_CHECK(example_connect());
-    ESP_ERROR_CHECK(init_fs());
+    init_fs();
     WebServer *webServer = new WebServer(CONFIG_EXAMPLE_WEB_MOUNT_POINT);
-    ESP_ERROR_CHECK(webServer->start());
+    webServer->start();
 }

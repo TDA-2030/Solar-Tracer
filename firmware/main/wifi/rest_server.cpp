@@ -70,7 +70,7 @@ static esp_err_t rest_common_get_handler(httpd_req_t *req)
 
     rest_server_context_t *rest_context = (rest_server_context_t *)req->user_ctx;
     strlcpy(filepath, rest_context->base_path, sizeof(filepath));
-    if (req->uri[strlen(req->uri) - 1] == '/') {
+    if (req->uri[strlen(req->uri) - 1] == '/' || strstr(req->uri, "/control") != NULL || strstr(req->uri, "/analysis") != NULL) {
         strlcat(filepath, "/index.html", sizeof(filepath));
     } else {
         strlcat(filepath, req->uri, sizeof(filepath));
@@ -322,7 +322,7 @@ fail:
     httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, ret_msg);
     return ESP_FAIL;
 }
-
+ 
 /* json format of setting */
 /*
 {
@@ -646,6 +646,13 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
     cJSON *root = cJSON_CreateObject();
     esp_chip_info_t chip_info;
     esp_chip_info(&chip_info);
+    const esp_partition_t *running = esp_ota_get_running_partition();
+    esp_app_desc_t running_app_info;
+    if (running && esp_ota_get_partition_description(running, &running_app_info) == ESP_OK) {
+        char *buf = ((rest_server_context_t *)(req->user_ctx))->scratch;
+        snprintf(buf, SCRATCH_BUFSIZE, "%s (at partition %s)", running_app_info.version, running->label);
+        cJSON_AddStringToObject(root, "APP version", buf);
+    }
     cJSON_AddStringToObject(root, "idfversion", IDF_VER);
     cJSON_AddStringToObject(root, "chip", CONFIG_IDF_TARGET);
     cJSON_AddNumberToObject(root, "cores", chip_info.cores);
@@ -751,6 +758,7 @@ esp_err_t WebServer::start()
     strlcpy(rest_context->base_path, base_path, sizeof(rest_context->base_path));
 
     config = HTTPD_DEFAULT_CONFIG();
+    config.max_uri_handlers = 10; // Increase the number of URI handlers if needed
     config.uri_match_fn = httpd_uri_match_wildcard;
 
     ESP_LOGI(TAG, "Starting HTTP Server");

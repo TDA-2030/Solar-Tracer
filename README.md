@@ -8,3 +8,8 @@
 - https://jonacappelle.github.io/Master-Thesis/_madgwick_a_h_r_s_8c.html
 - https://gml.noaa.gov/grad/solcalc/
 - https://zh.planetcalc.com/318/
+
+
+## 编译
+
+esp-idf 版本：8497af9b77

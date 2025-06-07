@@ -23,7 +23,7 @@
 #include "adc.h"
 
 #define POWER_ADC_CHANNEL ADC_CHANNEL_0
-#define VOLT_FILTER_ALPHA   0.9f
+#define VOLT_FILTER_ALPHA   0.6f
 static const char *TAG = "adc";
 
 static adc_oneshot_unit_handle_t power_adc_handle = NULL;
@@ -58,14 +58,14 @@ void adc_init(void)
 
 float adc_read_voltage(void)
 {
-    ESP_ERROR_CHECK(adc_oneshot_read(power_adc_handle, POWER_ADC_CHANNEL, &adc_raw));
+    adc_oneshot_read(power_adc_handle, POWER_ADC_CHANNEL, &adc_raw);
     int voltage = 0;
-    ESP_ERROR_CHECK(adc_cali_raw_to_voltage(power_adc_cali_handle, adc_raw, &voltage));
+    adc_cali_raw_to_voltage(power_adc_cali_handle, adc_raw, &voltage);
     if (filtered_voltage == 0) {
         filtered_voltage = voltage;
     }
     filtered_voltage = VOLT_FILTER_ALPHA * voltage + (1.0f - VOLT_FILTER_ALPHA) * filtered_voltage;
-    return filtered_voltage* 4.17f * 11.0f / 4096 ;
+    return filtered_voltage* 4.17f * 11.0f / 4096.0f ;
 }
 
 

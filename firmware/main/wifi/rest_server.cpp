@@ -693,23 +693,25 @@ static esp_err_t realtime_data_get_handler(httpd_req_t *req)
     cJSON *panel = cJSON_CreateObject();
     cjson_add_num_as_str(panel, "SunAzimuth", gimbal.sunPosition.dAzimuth);
     cjson_add_num_as_str(panel, "SunElevation", gimbal.sunPosition.dElevation);
-    cjson_add_num_as_str(panel, "voltage", adc_read_voltage());
+    cjson_add_num_as_str(panel, "voltage", gimbal.voltage);
     cjson_add_num_as_str(panel, "temperature", gimbal.imu->getData().temperature);
     cjson_add_num_as_str(panel, "longtiude", gimbal.gps->getData().longitude);
     cjson_add_num_as_str(panel, "latitude", gimbal.gps->getData().latitude);
+    cJSON_AddStringToObject(panel, "State", gimbal.getStateDescription());
     time_t now;
     time(&now);
     cJSON_AddNumberToObject(panel, "time", now);
+    cJSON_AddStringToObject(panel, "gpsReady", gimbal.gps->getData().valid ? "Ready" : "Not Ready");
     cJSON_AddItemToObject(root, "panel", panel);
 
     cJSON *yawmotor = cJSON_CreateObject();
-    cjson_add_num_as_str(yawmotor, "state", gimbal.yawMotor->get_state());
+    cJSON_AddStringToObject(yawmotor, "state", gimbal.yawMotor->get_state_description());
     cjson_add_num_as_str(yawmotor, "speed", gimbal.yawMotor->get_velocity());
     cjson_add_num_as_str(yawmotor, "angle", gimbal.yawMotor->get_position());
     cJSON_AddItemToObject(root, "YawMotor", yawmotor);
 
     cJSON *pitchmotor = cJSON_CreateObject();
-    cjson_add_num_as_str(pitchmotor, "state", gimbal.pitchMotor->get_state());
+    cJSON_AddStringToObject(pitchmotor, "state", gimbal.pitchMotor->get_state_description());
     cjson_add_num_as_str(pitchmotor, "speed", gimbal.pitchMotor->get_velocity());
     cjson_add_num_as_str(pitchmotor, "angle", gimbal.pitchMotor->get_position());
     cJSON_AddItemToObject(root, "PitchMotor", pitchmotor);

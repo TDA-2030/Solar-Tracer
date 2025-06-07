@@ -19,6 +19,19 @@
 #include "light_reflection.hpp"
 #include "sun_pos.h"
 
+#define SYS_STATE_LIST \
+X(STATE_INIT, "Initial")   \
+X(STATE_HOMING, "Homing")   \
+X(STATE_RUNNING, "Running")     \
+X(STATE_LOW_VOLTAGE, "Error Low voltage") \
+X(STATE_HIGH_VOLTAGE, "Error High voltage") \
+
+enum SysState {
+#define X(name, desc) name,
+    SYS_STATE_LIST
+#undef X
+    SYS_STATE_COUNT
+};
 
 class SensorLogger : public Observer<imu_data_t> {
 public:
@@ -49,12 +62,19 @@ public:
     void triger_task_immediate();
     std::shared_ptr<IMUBmi270> imu;
     std::shared_ptr<GPS> gps;
+    float voltage = 0.0f; // 电压
     struct pid pitchPID;
     std::shared_ptr<Motor> pitchMotor;
     std::shared_ptr<Motor> yawMotor;
     cSunCoordinates sunPosition;
+    const char *getStateDescription() const
+    {
+        return SysStateDescriptions[state];
+    }
 
 private:
+    static const char* SysStateDescriptions[];
+    SysState state = STATE_INIT;
     static void update_task(void *pvParameters);
     SemaphoreHandle_t task_sem;
     LightReflection light;

@@ -8,12 +8,18 @@
 #include "gimbal.h"
 #include "setting.h"
 #include "led.h"
+#include "adc.h"
 #include "board.h"
 
 static const char *TAG = "gimbal";
 
 #define LPF(beta, prev, input) ((beta) * (input) + (1 - (beta)) * (prev))
 
+const char* Gimbal::SysStateDescriptions[] = {
+#define X(name, desc) desc,
+    SYS_STATE_LIST
+#undef X
+};
 
 Gimbal::Gimbal(): imu(nullptr), gps(nullptr), pitchMotor(nullptr), yawMotor(nullptr),
     pitchTarget(0), yawTarget(0)
@@ -124,8 +130,10 @@ void Gimbal::init()
     search_azimuth(&max_azimuth, &min_azimuth, &max_elevation, &min_elevation);
 
     led_start_state(LED_GREEN, BLINK_FAST);
+    state = STATE_HOMING;
     check_home(70);
     led_stop_state(LED_GREEN, BLINK_FAST);
+    state = STATE_RUNNING;
 
     if (g_settings.mode == MODE_MANUAL) {
         setTarget(g_settings.target_pitch, 0, g_settings.target_yaw);
@@ -139,11 +147,31 @@ void Gimbal::init()
 void Gimbal::update(const imu_data_t &data)
 {
     static int count = 0;
-    if (count++ % 500 == 0) {
-        static uint64_t _lt = 0;
-        uint64_t start_time = esp_timer_get_time(); // 获取开始时间（微秒级）
-        ESP_LOGI(TAG, "Gimbal updating %d", (int)((start_time - _lt) / 1000));
-        _lt = start_time;
+    if (count++ % 10 == 0) {
+        voltage = adc_read_voltage();
+        if (state <= STATE_RUNNING) { // only check voltage when not in error state
+            if (voltage < g_settings.vol_min) {
+                ESP_LOGW(TAG, "Voltage too low: %.2fV", voltage);
+                state = STATE_LOW_VOLTAGE;
+            } else if (voltage > g_settings.vol_max) {
+                ESP_LOGW(TAG, "Voltage too high: %.2fV", voltage);
+                state = STATE_HIGH_VOLTAGE;
+            }
+            if (state > STATE_RUNNING) { // if in error state, stop motors and blink red LED
+                ESP_LOGW(TAG, "Gimbal in error state: %s", getStateDescription());
+                led_start_state(LED_RED, BLINK_FAST);
+                this->pitchMotor->enable(0);
+                this->yawMotor->enable(0);
+            }
+        } else {
+            if (voltage >= g_settings.vol_min && voltage <= g_settings.vol_max) { // if voltage is back to normal, reset state
+                ESP_LOGW(TAG, "Voltage is back to normal: %.2fV", voltage);
+                state = STATE_RUNNING;
+                led_stop_state(LED_RED, BLINK_FAST);
+                this->pitchMotor->enable(1);
+                this->yawMotor->enable(1);
+            }
+        }
     }
 
     static uint64_t last_time = 0;
@@ -151,16 +179,11 @@ void Gimbal::update(const imu_data_t &data)
     float dt = (float)(_time - last_time) / 1000000.0f;
     last_time = _time;
 
-
     // printf("angle: %f %f %f\n", data.angle.x, data.angle.y, data.angle.z);
     // printf("gyro: %f %f %f\n", data.gyro.x, data.gyro.y, data.gyro.z);
     // printf("acc: %f %f %f\n", data.acc.x, data.acc.y, data.acc.z);
 
-    // 只有pitch轴是由imu角度反馈控制的
-    // static float last_spd_out = 0;
-    // float output = pid_calculate(&pitchPID, data.angle.y, pitchTarget, dt);
-    // last_spd_out = LPF(0.75, last_spd_out, output);
-    // this->pitchMotor->set_position(last_spd_out);
+
     this->pitchMotor->run(dt);
     this->yawMotor->run(dt);
 }

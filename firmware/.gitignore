@@ -83,3 +83,4 @@ docs/docusaurus/website/node_modules
 # IDF package manager
 **/managed_components/
 *.lock
+esp-idf

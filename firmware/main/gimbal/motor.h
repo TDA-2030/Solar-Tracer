@@ -12,10 +12,16 @@
 #include "imu_base.h"
 #include "setting.h"
 
+#define MOT_STATE_LIST \
+X(MOT_STATE_IDLE, "Idle") \
+X(MOT_STATE_RUNNING, "Running") \
+X(MOT_STATE_WARNING, "Warning") \
+
 typedef enum {
-    MOT_STATE_IDLE = 0,
-    MOT_STATE_RUNNING,
-    MOT_STATE_WARNING,
+#define X(name, desc) name,
+    MOT_STATE_LIST
+#undef X
+    MOT_STATE_COUNT
 } mot_state_t;
 
 
@@ -145,6 +151,10 @@ public:
     {
         return this->state;
     }
+    const char *get_state_description() const
+    {
+        return motStateDescriptions[state];
+    }
 
     float get_velocity()
     {
@@ -158,6 +168,7 @@ public:
     struct pid positionPID;
     struct pid velocityPID;
 private:
+    static const char *motStateDescriptions[];
     const char *name;
     MotorSensor *sensor;
     PWM *pwm;

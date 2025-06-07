@@ -28,6 +28,12 @@ static const char *TAG = "motor";
 #define RECOVERY_OUTPUT_RATIO   0.8f    // Output ratio threshold for recovery
 
 
+const char* Motor::motStateDescriptions[] = {
+#define X(name, desc) desc,
+    MOT_STATE_LIST
+#undef X
+};
+
 bool EncoderSensor::init(int gpio_enca, int gpio_encb, float cpr)
 {
     ESP_LOGI(TAG, "install pcnt unit");
@@ -228,7 +234,7 @@ void Motor::attach_driver(PWM *pwm)
 
 void Motor::enable(bool is_enable)
 {
-    if (state != MOT_STATE_IDLE) {
+    if (state > MOT_STATE_RUNNING) {
         return;
     }
 

@@ -47,7 +47,9 @@
     </v-row>
   </v-container>
   <v-footer color="primary" app fixed>
-      <span class="white--text">Local Time: {{ serverTime }}</span>
+    <span :class="{ 'text-white': true, 'text-error': realtimeData?.panel?.gpsReady === 'Not Ready' }">
+      GPS Time: {{ serverTime }}({{ realtimeData.panel.gpsReady }})
+    </span>
   </v-footer>
 </template>
 

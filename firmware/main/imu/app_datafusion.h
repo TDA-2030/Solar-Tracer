@@ -7,9 +7,8 @@
 extern "C" {
 #endif
 
-void MahonyAHRSupdateIMU(imu_data_t * imu_data);
+void datafusion_update(imu_data_t * imu_data, float dt);
 
-void calculateAttitude(imu_data_t * imu_data, float dt);
 
 #ifdef __cplusplus
 }

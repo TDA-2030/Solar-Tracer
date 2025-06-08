@@ -30,7 +30,9 @@
         <v-card>
           <v-card-title>Angle Control</v-card-title>
           <v-card-text>
-            <v-slider v-model="controlData.man.yaw" label="Azimuth" min="-180" max="180" step="1" thumb-label="always"
+            <!-- 显示说明 -->
+            <p v-if="mode === 'manual' || mode === 'reflect'">0指示正北，顺时针旋转为正角度， 180指示正南</p>
+            <v-slider v-model="controlData.man.yaw" label="Azimuth" min="0" max="360" step="1" thumb-label="always"
               :disabled="mode === 'toward'"></v-slider>
 
             <v-slider v-model="controlData.man.pitch" label="Elevation" min="-90" max="90" step="1" thumb-label="always"

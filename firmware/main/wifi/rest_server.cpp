@@ -20,6 +20,7 @@
 #include "cJSON.h"
 #include "rest_server.h"
 #include "setting.h"
+#include "build_time.h"
 #include "adc.h"
 
 static const char *TAG = "esp-rest";
@@ -656,8 +657,7 @@ static esp_err_t system_info_get_handler(httpd_req_t *req)
     cJSON_AddStringToObject(root, "idfversion", IDF_VER);
     cJSON_AddStringToObject(root, "chip", CONFIG_IDF_TARGET);
     cJSON_AddNumberToObject(root, "cores", chip_info.cores);
-    cJSON_AddStringToObject(root, "compile date", __DATE__);
-    cJSON_AddStringToObject(root, "compile time", __TIME__);
+    cJSON_AddStringToObject(root, "build_time", BUILD_TIMESTAMP);
     const char *sys_info = cJSON_PrintUnformatted(root);
     httpd_resp_sendstr(req, sys_info);
     free((void *)sys_info);

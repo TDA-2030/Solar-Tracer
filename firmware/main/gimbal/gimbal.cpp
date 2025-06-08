@@ -15,7 +15,7 @@ static const char *TAG = "gimbal";
 
 #define LPF(beta, prev, input) ((beta) * (input) + (1 - (beta)) * (prev))
 
-const char* Gimbal::SysStateDescriptions[] = {
+const char *Gimbal::SysStateDescriptions[] = {
 #define X(name, desc) desc,
     SYS_STATE_LIST
 #undef X
@@ -92,7 +92,7 @@ void Gimbal::init()
     }
 
     this->pitchMotor = std::make_shared<Motor>("pitch", 360.0f);
-    this->yawMotor = std::make_shared<Motor>("yaw", 3000.0f);
+    this->yawMotor = std::make_shared<Motor>("yaw", 3000.0f + 29.0f);
     static EncoderSensor encoderx;
     encoderx.init(BOARD_IO_MOTX_ENC_A, BOARD_IO_MOTX_ENC_B, 4 * 11);
     static IMUMotSensor imusensory;
@@ -144,34 +144,39 @@ void Gimbal::init()
     xTaskCreate(Gimbal::update_task, "gimbal_update", 4096, this, 5, NULL);
 }
 
+void Gimbal::check_voltage()
+{
+    voltage = adc_read_voltage();
+    if (state <= STATE_RUNNING) { // only check voltage when not in error state
+        if (voltage < g_settings.vol_min) {
+            ESP_LOGW(TAG, "Voltage too low: %.2fV", voltage);
+            state = STATE_LOW_VOLTAGE;
+        } else if (voltage > g_settings.vol_max) {
+            ESP_LOGW(TAG, "Voltage too high: %.2fV", voltage);
+            state = STATE_HIGH_VOLTAGE;
+        }
+        if (state > STATE_RUNNING) { // if in error state, stop motors and blink red LED
+            ESP_LOGW(TAG, "Gimbal in error state: %s", getStateDescription());
+            led_start_state(LED_RED, BLINK_FAST);
+            this->pitchMotor->enable(0);
+            this->yawMotor->enable(0);
+        }
+    } else {
+        if (voltage >= g_settings.vol_min && voltage <= g_settings.vol_max) { // if voltage is back to normal, reset state
+            ESP_LOGW(TAG, "Voltage is back to normal: %.2fV", voltage);
+            state = STATE_RUNNING;
+            led_stop_state(LED_RED, BLINK_FAST);
+            this->pitchMotor->enable(1);
+            this->yawMotor->enable(1);
+        }
+    }
+}
+
 void Gimbal::update(const imu_data_t &data)
 {
     static int count = 0;
     if (count++ % 10 == 0) {
-        voltage = adc_read_voltage();
-        if (state <= STATE_RUNNING) { // only check voltage when not in error state
-            if (voltage < g_settings.vol_min) {
-                ESP_LOGW(TAG, "Voltage too low: %.2fV", voltage);
-                state = STATE_LOW_VOLTAGE;
-            } else if (voltage > g_settings.vol_max) {
-                ESP_LOGW(TAG, "Voltage too high: %.2fV", voltage);
-                state = STATE_HIGH_VOLTAGE;
-            }
-            if (state > STATE_RUNNING) { // if in error state, stop motors and blink red LED
-                ESP_LOGW(TAG, "Gimbal in error state: %s", getStateDescription());
-                led_start_state(LED_RED, BLINK_FAST);
-                this->pitchMotor->enable(0);
-                this->yawMotor->enable(0);
-            }
-        } else {
-            if (voltage >= g_settings.vol_min && voltage <= g_settings.vol_max) { // if voltage is back to normal, reset state
-                ESP_LOGW(TAG, "Voltage is back to normal: %.2fV", voltage);
-                state = STATE_RUNNING;
-                led_stop_state(LED_RED, BLINK_FAST);
-                this->pitchMotor->enable(1);
-                this->yawMotor->enable(1);
-            }
-        }
+        check_voltage();
     }
 
     static uint64_t last_time = 0;
@@ -223,8 +228,7 @@ void Gimbal::getSunPosition(cSunCoordinates *sunCoordinates)
     sunpos(time, location, sunCoordinates);
     printf("LocalTime:%d-%d-%d %d:%d:%d UTCTime:%d-%d-%d %d:%d:%d Elevation:%.2f°, Azimuth:%.2f°, Zenith:%.2f°\n", timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec,
            localtime.tm_year + 1900, localtime.tm_mon + 1, localtime.tm_mday, localtime.tm_hour, localtime.tm_min, localtime.tm_sec,
-           sunCoordinates->dElevation, sunCoordinates->dAzimuth, sunCoordinates->dZenithAngle
-    );
+           sunCoordinates->dElevation, sunCoordinates->dAzimuth, sunCoordinates->dZenithAngle);
     printf("Longitude:%.2f, Latitude:%.2f\n", location.dLongitude, location.dLatitude);
 }
 
@@ -242,7 +246,7 @@ void Gimbal::update_task(void *pvParameters)
             case MODE_REFLECT: {
                 // calculate normal vector of mirror surface
                 auto incident = pgimbal->light.angle_to_vector(pgimbal->sunPosition.dAzimuth, pgimbal->sunPosition.dElevation);
-                auto reflection_vector = pgimbal->light.angle_to_vector(g_settings.target_yaw + 180, g_settings.target_pitch);
+                auto reflection_vector = pgimbal->light.angle_to_vector(g_settings.target_yaw, g_settings.target_pitch);
                 auto calculated_normal = pgimbal->light.calculate_normal(incident, reflection_vector);
                 auto [normal_azimuth, normal_elevation] = pgimbal->light.vector_to_angle(calculated_normal);
                 ESP_LOGI(TAG, "Normal Vector Azimuth: %f, Elevation: %f", normal_azimuth, normal_elevation);
@@ -254,7 +258,7 @@ void Gimbal::update_task(void *pvParameters)
             } break;
 
             case MODE_MANUAL:
-                pgimbal->setTarget(g_settings.target_pitch, 0, g_settings.target_yaw+180);
+                pgimbal->setTarget(g_settings.target_pitch, 0, g_settings.target_yaw);
                 break;
 
             default:

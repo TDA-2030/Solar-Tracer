@@ -143,7 +143,7 @@ void IMUBmi270::readData()
         _data.gyro.x = lsb_to_dps(sensor_data.gyr.x, (float)2000, bmi2_dev->resolution);
         _data.gyro.y = lsb_to_dps(sensor_data.gyr.y, (float)2000, bmi2_dev->resolution);
         _data.gyro.z = lsb_to_dps(sensor_data.gyr.z, (float)2000, bmi2_dev->resolution);
-        calculateAttitude(&_data, 0.01f);
+        datafusion_update(&_data, 0.01f);
         _data.angle.z = compass->getAzimuth();
         notifyObservers(_data);
     } else {

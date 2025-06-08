@@ -76,6 +76,7 @@ private:
     static const char* SysStateDescriptions[];
     SysState state = STATE_INIT;
     static void update_task(void *pvParameters);
+    void check_voltage();
     SemaphoreHandle_t task_sem;
     LightReflection light;
     float pitchTarget;
